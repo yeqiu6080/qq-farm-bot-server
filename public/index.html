@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QQ农场共享版控制台</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <!-- 导航抽屉 (Navigation Drawer) -->
+        <aside class="nav-drawer" id="navDrawer">
+            <div class="nav-drawer-header">
+                <div class="nav-drawer-logo">
+                    <span class="material-symbols-rounded">agriculture</span>
+                    <span class="logo-text">QQ农场</span>
+                </div>
+            </div>
+            <nav class="nav-rail">
+                <a href="#dashboard" class="nav-item active" data-page="dashboard">
+                    <span class="material-symbols-rounded nav-icon">dashboard</span>
+                    <span class="nav-label">总览</span>
+                </a>
+                <a href="#accounts" class="nav-item" data-page="accounts">
+                    <span class="material-symbols-rounded nav-icon">group</span>
+                    <span class="nav-label">账号管理</span>
+                </a>
+                <a href="#logs" class="nav-item" data-page="logs">
+                    <span class="material-symbols-rounded nav-icon">description</span>
+                    <span class="nav-label">实时日志</span>
+                </a>
+            </nav>
+            <div class="nav-drawer-footer">
+                <div class="connection-status">
+                    <span class="status-indicator" id="wsStatus"></span>
+                    <span class="status-text" id="wsStatusText">连接中...</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 顶部应用栏 (Top App Bar) -->
+            <header class="top-app-bar">
+                <button class="icon-btn nav-toggle" id="navToggle">
+                    <span class="material-symbols-rounded">menu</span>
+                </button>
+                <h1 class="top-app-bar-title" id="pageTitle">控制台总览</h1>
+                <div class="top-app-bar-actions">
+                    <button class="btn btn-filled" onclick="app.startAll()">
+                        <span class="material-symbols-rounded">play_arrow</span>
+                        启动全部
+                    </button>
+                    <button class="btn btn-tonal" onclick="app.stopAll()">
+                        <span class="material-symbols-rounded">stop</span>
+                        停止全部
+                    </button>
+                </div>
+            </header>
+
+            <!-- 页面内容 -->
+            <div class="content-area">
+                <!-- 总览页面 -->
+                <div id="page-dashboard" class="page active">
+                    <!-- 统计卡片 -->
+                    <div class="stats-row">
+                        <div class="stat-card">
+                            <div class="stat-card-icon primary">
+                                <span class="material-symbols-rounded">person</span>
+                            </div>
+                            <div class="stat-card-content">
+                                <span class="stat-value headline-large" id="statTotalAccounts">0</span>
+                                <span class="stat-label label-medium">总账号数</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-icon success">
+                                <span class="material-symbols-rounded">check_circle</span>
+                            </div>
+                            <div class="stat-card-content">
+                                <span class="stat-value headline-large" id="statRunningAccounts">0</span>
+                                <span class="stat-label label-medium">运行中</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-icon tertiary">
+                                <span class="material-symbols-rounded">local_florist</span>
+                            </div>
+                            <div class="stat-card-content">
+                                <span class="stat-value headline-large" id="statTotalHarvests">0</span>
+                                <span class="stat-label label-medium">总收获</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-icon secondary">
+                                <span class="material-symbols-rounded">shopping_basket</span>
+                            </div>
+                            <div class="stat-card-content">
+                                <span class="stat-value headline-large" id="statTotalSteals">0</span>
+                                <span class="stat-label label-medium">总偷取</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 运行中账号 -->
+                    <section class="content-section">
+                        <div class="section-header">
+                            <h2 class="section-title title-large">运行中的账号</h2>
+                        </div>
+                        <div class="accounts-grid" id="runningAccountsGrid">
+                            <div class="empty-state">
+                                <span class="material-symbols-rounded empty-icon">sleep</span>
+                                <p class="body-large">暂无运行中的账号</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- 账号管理页面 -->
+                <div id="page-accounts" class="page">
+                    <section class="content-section">
+                        <div class="section-header">
+                            <h2 class="section-title title-large">账号列表</h2>
+                            <button class="btn btn-filled" onclick="app.showAddAccountModal()">
+                                <span class="material-symbols-rounded">add</span>
+                                添加账号
+                            </button>
+                        </div>
+                        <div class="data-table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>名称</th>
+                                        <th>平台</th>
+                                        <th>状态</th>
+                                        <th>等级</th>
+                                        <th>金币</th>
+                                        <th>收获</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="accountsTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- 日志页面 -->
+                <div id="page-logs" class="page">
+                    <section class="content-section">
+                        <div class="section-header">
+                            <h2 class="section-title title-large">实时日志</h2>
+                            <div class="section-actions">
+                                <div class="chip-group" id="logFilters">
+                                    <button class="chip filter-chip active" data-filter="all">
+                                        <span class="chip-label">全部</span>
+                                    </button>
+                                    <button class="chip filter-chip" data-filter="农场">
+                                        <span class="chip-label">农场</span>
+                                    </button>
+                                    <button class="chip filter-chip" data-filter="好友">
+                                        <span class="chip-label">好友</span>
+                                    </button>
+                                    <button class="chip filter-chip" data-filter="系统">
+                                        <span class="chip-label">系统</span>
+                                    </button>
+                                </div>
+                                <button class="btn btn-text" onclick="app.clearLogs()">
+                                    <span class="material-symbols-rounded">delete</span>
+                                    清空
+                                </button>
+                            </div>
+                        </div>
+                        <div class="logs-container" id="logsContainer">
+                            <div class="log-entry">
+                                <span class="log-time label-small">--:--:--</span>
+                                <span class="log-tag tag-system">系统</span>
+                                <span class="log-message body-medium">等待连接...</span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 添加账号对话框 -->
+    <div class="dialog-overlay" id="addAccountModal">
+        <div class="dialog">
+            <div class="dialog-header">
+                <h3 class="dialog-title headline-small">添加账号</h3>
+                <button class="icon-btn dialog-close" onclick="app.hideAddAccountModal()">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="dialog-content">
+                <form id="addAccountForm">
+                    <div class="text-field">
+                        <label class="text-field-label">账号名称</label>
+                        <input type="text" name="name" class="text-field-input" placeholder="例如: 主号" required>
+                        <span class="text-field-supporting">为账号设置一个易记的名称</span>
+                    </div>
+                    <div class="text-field">
+                        <label class="text-field-label">登录码 (Code)</label>
+                        <div class="text-field-with-button">
+                            <input type="text" name="code" id="qrCodeInput" class="text-field-input" placeholder="从小程序抓包获取或扫码登录" required>
+                            <button type="button" class="btn btn-outlined" onclick="app.showQrLogin()">
+                                <span class="material-symbols-rounded">qr_code_scanner</span>
+                                扫码
+                            </button>
+                        </div>
+                        <span class="text-field-supporting">QQ平台支持扫码登录，微信需要手动抓包获取code</span>
+                    </div>
+                    <div class="text-field">
+                        <label class="text-field-label">平台</label>
+                        <select name="platform" class="text-field-input">
+                            <option value="qq">QQ</option>
+                            <option value="wx">微信</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="text-field">
+                            <label class="text-field-label">农场检查间隔 (秒)</label>
+                            <input type="number" name="farmInterval" class="text-field-input" value="10" min="5" max="60">
+                        </div>
+                        <div class="text-field">
+                            <label class="text-field-label">好友检查间隔 (秒)</label>
+                            <input type="number" name="friendInterval" class="text-field-input" value="10" min="5" max="120">
+                        </div>
+                    </div>
+                    <div class="checkbox-group">
+                        <label class="checkbox">
+                            <input type="checkbox" name="enableSteal" checked>
+                            <span class="checkbox-checkmark">
+                                <span class="material-symbols-rounded">check</span>
+                            </span>
+                            <span class="checkbox-label">启用偷菜</span>
+                        </label>
+                        <label class="checkbox">
+                            <input type="checkbox" name="enableHelp" checked>
+                            <span class="checkbox-checkmark">
+                                <span class="material-symbols-rounded">check</span>
+                            </span>
+                            <span class="checkbox-label">启用帮助好友</span>
+                        </label>
+                        <label class="checkbox">
+                            <input type="checkbox" name="enableSell" checked>
+                            <span class="checkbox-checkmark">
+                                <span class="material-symbols-rounded">check</span>
+                            </span>
+                            <span class="checkbox-label">自动出售果实</span>
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="dialog-actions">
+                <button class="btn btn-text" onclick="app.hideAddAccountModal()">取消</button>
+                <button class="btn btn-filled" onclick="app.submitAddAccount()">添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 账号详情对话框 -->
+    <div class="dialog-overlay" id="accountDetailModal">
+        <div class="dialog dialog-large">
+            <div class="dialog-header">
+                <h3 class="dialog-title headline-small" id="detailAccountName">账号详情</h3>
+                <button class="icon-btn dialog-close" onclick="app.hideAccountDetailModal()">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="dialog-content">
+                <div class="detail-grid" id="accountDetailContent">
+                </div>
+                <div class="detail-logs">
+                    <h4 class="title-medium">最近日志</h4>
+                    <div class="logs-list" id="detailLogsList"></div>
+                </div>
+            </div>
+            <div class="dialog-actions">
+                <button class="btn btn-text error-text" onclick="app.deleteCurrentAccount()">
+                    <span class="material-symbols-rounded">delete</span>
+                    删除账号
+                </button>
+                <div class="dialog-actions-spacer"></div>
+                <button class="btn btn-text" onclick="app.hideAccountDetailModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 扫码登录对话框 -->
+    <div class="dialog-overlay" id="qrLoginModal">
+        <div class="dialog">
+            <div class="dialog-header">
+                <h3 class="dialog-title headline-small">QQ扫码登录</h3>
+                <button class="icon-btn dialog-close" onclick="app.hideQrLoginModal()">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="dialog-content">
+                <div class="qr-container">
+                    <div id="qrCodeDisplay" class="qr-code-wrapper">
+                        <div class="qr-loading">
+                            <span class="material-symbols-rounded">refresh</span>
+                            <span>正在获取二维码...</span>
+                        </div>
+                    </div>
+                    <div class="qr-status title-medium" id="qrStatus">
+                        请使用QQ手机版扫描二维码
+                    </div>
+                    <div class="qr-tips">
+                        <p class="label-large">提示</p>
+                        <ul class="body-medium">
+                            <li>请确保手机上已安装QQ</li>
+                            <li>扫码后请在手机上确认登录</li>
+                            <li>二维码有效期约3分钟</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="dialog-actions">
+                <button class="btn btn-outlined" onclick="app.refreshQrCode()">
+                    <span class="material-symbols-rounded">refresh</span>
+                    刷新二维码
+                </button>
+                <button class="btn btn-text" onclick="app.hideQrLoginModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部导航栏 (移动端) -->
+    <nav class="bottom-nav" id="bottomNav">
+        <a href="#dashboard" class="bottom-nav-item active" data-page="dashboard">
+            <span class="material-symbols-rounded">dashboard</span>
+            <span class="bottom-nav-label">总览</span>
+        </a>
+        <a href="#accounts" class="bottom-nav-item" data-page="accounts">
+            <span class="material-symbols-rounded">group</span>
+            <span class="bottom-nav-label">账号</span>
+        </a>
+        <a href="#logs" class="bottom-nav-item" data-page="logs">
+            <span class="material-symbols-rounded">description</span>
+            <span class="bottom-nav-label">日志</span>
+        </a>
+    </nav>
+
+    <script src="app.js"></script>
+</body>
+</html>
