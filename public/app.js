@@ -537,10 +537,18 @@ class FarmApp {
         const form = document.getElementById('addAccountForm');
         const formData = new FormData(form);
         
+        const platform = formData.get('platform');
+        const code = formData.get('code');
+        
+        // 自动生成账号名称：平台 + 序号
+        const platformName = platform === 'qq' ? 'QQ' : '微信';
+        const existingCount = this.accounts.filter(a => a.platform === platform).length;
+        const name = `${platformName}账号${existingCount + 1}`;
+        
         const data = {
-            name: formData.get('name'),
-            code: formData.get('code'),
-            platform: formData.get('platform'),
+            name: name,
+            code: code,
+            platform: platform,
             config: {
                 farmCheckInterval: parseInt(formData.get('farmInterval')),
                 friendCheckInterval: parseInt(formData.get('friendInterval')),
