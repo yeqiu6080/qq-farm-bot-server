@@ -48,7 +48,10 @@ class FarmManager {
             this.broadcast(accountId, {
                 type: 'accountConnected',
                 accountId,
-                data: state
+                data: {
+                    ...connection.getStatus(),
+                    ...state
+                }
             });
         });
 

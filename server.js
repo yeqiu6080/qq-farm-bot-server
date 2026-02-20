@@ -12,7 +12,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const AccountManager = require('./src/AccountManager');
 const FarmManager = require('./src/FarmManager');
-const { getQQFarmCodeByScan } = require('./src/qqQrLogin');
+
 
 // 扫码登录状态存储
 const qrLoginSessions = new Map();
@@ -292,23 +292,11 @@ app.post('/api/qr-login', async (req, res) => {
     try {
         const sessionId = uuidv4();
         
-        // 启动扫码登录流程
-        getQQFarmCodeByScan()
-            .then(code => {
-                // 扫码成功，保存code
-                qrLoginSessions.set(sessionId, {
-                    status: 'success',
-                    code: code,
-                    timestamp: Date.now()
-                });
-            })
-            .catch(error => {
-                qrLoginSessions.set(sessionId, {
-                    status: 'error',
-                    message: error.message,
-                    timestamp: Date.now()
-                });
-            });
+        // 创建扫码会话，等待前端获取二维码URL
+        qrLoginSessions.set(sessionId, {
+            status: 'pending',
+            timestamp: Date.now()
+        });
 
         // 立即返回sessionId，客户端需要轮询状态
         res.json({
@@ -316,7 +304,7 @@ app.post('/api/qr-login', async (req, res) => {
             data: {
                 sessionId,
                 status: 'pending',
-                message: '请在控制台查看二维码并扫码'
+                message: '请获取二维码并扫码'
             }
         });
     } catch (error) {
@@ -353,17 +341,28 @@ app.get('/api/qr-login/:sessionId/status', async (req, res) => {
             return res.status(404).json({ success: false, message: '会话不存在' });
         }
 
+        // 如果还在等待获取二维码
+        if (session.status === 'pending') {
+            return res.json({
+                success: true,
+                data: { status: 'waiting', message: '等待获取二维码' }
+            });
+        }
+
         // 如果还在等待扫码，查询状态
         if (session.status === 'waiting' && session.loginCode) {
             const { queryScanStatus, getAuthCode } = require('./src/qqQrLogin');
             const status = await queryScanStatus(session.loginCode);
-            
+
+            console.log(`[扫码状态查询] sessionId=${req.params.sessionId}, loginCode=${session.loginCode}, status=${status.status}`);
+
             if (status.status === 'OK') {
                 const code = await getAuthCode(status.ticket);
                 session.status = 'success';
                 session.code = code;
                 qrLoginSessions.set(req.params.sessionId, session);
-                
+                console.log(`[扫码成功] sessionId=${req.params.sessionId}, code=${code}`);
+
                 return res.json({
                     success: true,
                     data: { status: 'success', code: code }
@@ -371,9 +370,16 @@ app.get('/api/qr-login/:sessionId/status', async (req, res) => {
             } else if (status.status === 'Used') {
                 session.status = 'expired';
                 qrLoginSessions.set(req.params.sessionId, session);
+                console.log(`[二维码过期] sessionId=${req.params.sessionId}`);
                 return res.json({
                     success: true,
                     data: { status: 'expired', message: '二维码已过期' }
+                });
+            } else if (status.status === 'Wait') {
+                // 等待扫码中
+                return res.json({
+                    success: true,
+                    data: { status: 'waiting', message: '等待扫码' }
                 });
             } else if (status.status === 'Error') {
                 return res.json({
@@ -388,6 +394,7 @@ app.get('/api/qr-login/:sessionId/status', async (req, res) => {
             data: session
         });
     } catch (error) {
+        console.error(`[扫码状态查询错误] sessionId=${req.params.sessionId}, error=${error.message}`);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -425,19 +432,37 @@ app.get('/', (req, res) => {
 });
 
 // 启动服务器
-const PORT = 3456;
-server.listen(PORT, () => {
+const PORT = process.env.PORT || 3456;
+const HOST = process.env.HOST || '0.0.0.0';
+server.listen(PORT, HOST, () => {
+    const addresses = getLocalAddresses();
     console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
 ║              🌾 QQ农场共享版服务器已启动 🌾                  ║
 ║                                                              ║
-║   访问地址: http://localhost:${PORT}                          ║
-║   API文档: http://localhost:${PORT}/api/accounts              ║
+║   本机访问: http://localhost:${PORT}                          ║
+║   局域网访问: http://${addresses[0] || '本机IP'}:${PORT}                   ║
+║   API文档: http://${addresses[0] || '本机IP'}:${PORT}/api/accounts        ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
     `);
 });
+
+// 获取本机局域网IP
+function getLocalAddresses() {
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    const addresses = [];
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                addresses.push(iface.address);
+            }
+        }
+    }
+    return addresses;
+}
 
 // 优雅退出
 process.on('SIGINT', async () => {

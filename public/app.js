@@ -70,16 +70,21 @@ class FarmApp {
         this.ws.onopen = () => {
             console.log('[WebSocket] 已连接');
             this.updateConnectionStatus(true);
-            
+
             // 订阅所有账号
             this.ws.send(JSON.stringify({
                 action: 'subscribe',
                 accountId: 'all'
             }));
-            
+
             // 请求账号列表
             this.ws.send(JSON.stringify({
                 action: 'getAccounts'
+            }));
+
+            // 请求运行中账号的状态
+            this.ws.send(JSON.stringify({
+                action: 'getStatus'
             }));
         };
         
@@ -114,18 +119,35 @@ class FarmApp {
                 this.renderAccountsTable();
                 this.updateStats();
                 break;
-                
-            case 'accountConnected':
+
+            case 'status':
+                // 初始化运行中账号的状态
+                if (data.data) {
+                    for (const [accountId, status] of Object.entries(data.data)) {
+                        this.runningAccounts.set(accountId, status);
+                    }
+                    this.renderAccountsTable();
+                    this.updateRunningAccounts();
+                    this.updateStats();
+                }
+                break;
+
+            case 'accountConnected': {
+                const existingData = this.runningAccounts.get(data.accountId) || {};
                 this.runningAccounts.set(data.accountId, {
-                    ...this.runningAccounts.get(data.accountId),
+                    ...existingData,
                     ...data.data,
-                    isRunning: true
+                    isRunning: true,
+                    isConnected: true,
+                    connectionState: 'connected'
                 });
+                this.renderAccountsTable();
                 this.updateRunningAccounts();
                 this.updateStats();
                 break;
+            }
                 
-            case 'accountDisconnected':
+            case 'accountDisconnected': {
                 if (this.runningAccounts.has(data.accountId)) {
                     const account = this.runningAccounts.get(data.accountId);
                     account.isConnected = false;
@@ -137,8 +159,9 @@ class FarmApp {
                 this.updateRunningAccounts();
                 this.updateStats();
                 break;
-                
-            case 'connectionLost':
+            }
+
+            case 'connectionLost': {
                 if (this.runningAccounts.has(data.accountId)) {
                     const account = this.runningAccounts.get(data.accountId);
                     account.isConnected = false;
@@ -149,35 +172,40 @@ class FarmApp {
                 this.updateRunningAccounts();
                 this.addLog('连接', `账号连接丢失: ${data.data?.reason}`, data.accountId);
                 break;
-                
+            }
+
             case 'accountStopped':
                 this.runningAccounts.delete(data.accountId);
                 this.updateRunningAccounts();
                 this.updateStats();
                 break;
-                
-            case 'stateChanged':
+
+            case 'stateChanged': {
                 if (this.runningAccounts.has(data.accountId)) {
                     const account = this.runningAccounts.get(data.accountId);
                     account.userState = { ...account.userState, ...data.data };
                     this.runningAccounts.set(data.accountId, account);
+                    this.renderAccountsTable();
                     this.updateRunningAccounts();
                     if (this.currentAccountId === data.accountId) {
                         this.updateAccountDetail();
                     }
                 }
                 break;
-                
-            case 'statsChanged':
+            }
+
+            case 'statsChanged': {
                 if (this.runningAccounts.has(data.accountId)) {
                     const account = this.runningAccounts.get(data.accountId);
                     account.stats = { ...account.stats, ...data.data };
                     this.runningAccounts.set(data.accountId, account);
+                    this.renderAccountsTable();
                     this.updateRunningAccounts();
                     this.updateStats();
                 }
                 break;
-                
+            }
+
             case 'log':
                 this.addLog(data.data.tag, data.data.message, data.accountId);
                 break;
@@ -536,15 +564,15 @@ class FarmApp {
     async submitAddAccount() {
         const form = document.getElementById('addAccountForm');
         const formData = new FormData(form);
-        
+
         const platform = formData.get('platform');
         const code = formData.get('code');
-        
+
         // 自动生成账号名称：平台 + 序号
         const platformName = platform === 'qq' ? 'QQ' : '微信';
         const existingCount = this.accounts.filter(a => a.platform === platform).length;
         const name = `${platformName}账号${existingCount + 1}`;
-        
+
         const data = {
             name: name,
             code: code,
@@ -564,19 +592,76 @@ class FarmApp {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
-            
+
             const result = await response.json();
             if (result.success) {
+                const accountId = result.data.id;
                 this.hideAddAccountModal();
-                this.loadAccounts();
-                this.addLog('系统', `账号 "${data.name}" 添加成功`);
-                this.showSnackbar('账号添加成功');
+                await this.loadAccounts();
+                this.addLog('系统', `账号 "${data.name}" 添加成功，正在启动...`);
+                this.showSnackbar('账号添加成功，正在启动...');
+
+                // 自动启动账号
+                await this.startAccount(accountId);
+
+                // 监听登录成功事件，获取到用户名后更新账号名称
+                this.waitForUserNameAndRename(accountId);
             } else {
                 this.showSnackbar('添加失败: ' + result.message);
             }
         } catch (e) {
             this.showSnackbar('添加失败: ' + e.message);
         }
+    }
+
+    // 等待获取用户名并更新账号名称
+    async waitForUserNameAndRename(accountId) {
+        const checkInterval = 500; // 每500ms检查一次
+        const maxAttempts = 60; // 最多检查60次（30秒）
+        let attempts = 0;
+
+        const checkUserName = async () => {
+            attempts++;
+            const status = this.runningAccounts.get(accountId);
+
+            // 检查是否获取到了用户名
+            if (status && status.userState && status.userState.name && status.userState.name !== '未知') {
+                const newName = status.userState.name;
+
+                // 更新账号名称
+                try {
+                    const response = await fetch(`/api/accounts/${accountId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: newName })
+                    });
+
+                    const result = await response.json();
+                    if (result.success) {
+                        // 更新本地数据
+                        const account = this.accounts.find(a => a.id === accountId);
+                        if (account) {
+                            account.name = newName;
+                        }
+                        this.renderAccountsTable();
+                        this.updateRunningAccounts();
+                        this.addLog('系统', `账号名称已更新为: ${newName}`);
+                        this.showSnackbar(`账号名称已更新为: ${newName}`);
+                    }
+                } catch (e) {
+                    console.error('更新账号名称失败:', e);
+                }
+                return;
+            }
+
+            // 继续检查
+            if (attempts < maxAttempts) {
+                setTimeout(checkUserName, checkInterval);
+            }
+        };
+
+        // 开始检查
+        setTimeout(checkUserName, 1000); // 延迟1秒后开始检查
     }
 
     // ===== Account Detail =====

@@ -92,7 +92,7 @@ class FarmConnection extends EventEmitter {
 
             this.ws = new WebSocket(url, {
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI MiniProgramEnv/Windows WindowsWechat/WMPF WindowsWechat(0x63090a13)',
                     'Origin': 'https://gate-obt.nqf.qq.com',
                 },
             });
@@ -130,7 +130,10 @@ class FarmConnection extends EventEmitter {
                 this.connectionState = 'error';
                 this.disconnectedReason = `WebSocket错误: ${err.message}`;
                 this.addLog('错误', this.disconnectedReason);
-                reject(err);
+                // 只有在连接尚未成功时才 reject，避免重复 reject
+                if (!this.isConnected) {
+                    reject(err);
+                }
             });
 
             // 连接超时
@@ -375,6 +378,8 @@ class FarmConnection extends EventEmitter {
 
                     this.emit('connected', { ...this.userState });
                     resolve({ ...this.userState });
+                } else {
+                    reject(new Error('登录响应中没有用户信息，可能是登录码已过期'));
                 }
             } catch (e) {
                 reject(e);

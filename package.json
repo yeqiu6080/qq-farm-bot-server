@@ -4,8 +4,9 @@
   "description": "QQ农场共享版服务器 - 支持多账号管理",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "sv": "node server.js",
+    "dev": "node server.js",
+    "start": "pm2 start ecosystem.config.js"
   },
   "dependencies": {
     "axios": "^1.13.5",
