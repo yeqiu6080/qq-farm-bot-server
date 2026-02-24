@@ -10,6 +10,9 @@ const { types } = require('./proto');
 const { toLong, toNum, syncServerTime, sleep, log, logWarn } = require('./utils');
 const { getPlantNameBySeedId, getPlantName, getPlantExp, getItemName, getLevelExpProgress, getFruitName } = require('./gameConfig');
 const { getPlantingRecommendation } = require('../tools/calc-exp-yield');
+const DailyRewards = require('./DailyRewards');
+const LandManager = require('./LandManager');
+const FriendOptimizer = require('./FriendOptimizer');
 
 // 加载种子商店数据用于果实识别
 let seedShopData = null;
@@ -92,7 +95,17 @@ class FarmConnection extends EventEmitter {
             enableSteal: account.config?.enableSteal !== false,
             enableSell: account.config?.enableSell !== false,
             enableTask: account.config?.enableTask !== false,
+            // 新增功能开关
+            autoLandUnlock: account.config?.autoLandUnlock !== false,
+            autoLandUpgrade: account.config?.autoLandUpgrade !== false,
+            skipStealRadish: account.config?.skipStealRadish !== false,
+            helpEvenExpFull: account.config?.helpEvenExpFull !== false,
         };
+
+        // 初始化新模块
+        this.dailyRewards = new DailyRewards(this);
+        this.landManager = new LandManager(this);
+        this.friendOptimizer = new FriendOptimizer(this);
     }
 
     addLog(tag, message) {
@@ -399,6 +412,9 @@ class FarmConnection extends EventEmitter {
                         this.startTaskLoop();
                     }
 
+                    // 启动每日奖励系统
+                    this.dailyRewards.start();
+
                     this.emit('connected', { ...this.userState });
                     resolve({ ...this.userState });
                 } else {
@@ -583,6 +599,21 @@ class FarmConnection extends EventEmitter {
         const unlockedLandCount = lands.filter(land => land && land.unlocked).length;
 
         const actions = [];
+
+        // 土地解锁和升级
+        if (this.config.autoLandUnlock || this.config.autoLandUpgrade) {
+            const landAnalysis = this.landManager.analyzeLands(lands);
+            
+            if (this.config.autoLandUnlock && landAnalysis.unlockable.length > 0) {
+                const unlocked = await this.landManager.autoUnlockLands(lands);
+                if (unlocked > 0) actions.push(`解锁${unlocked}`);
+            }
+            
+            if (this.config.autoLandUpgrade && landAnalysis.upgradable.length > 0) {
+                const upgraded = await this.landManager.autoUpgradeLands(lands);
+                if (upgraded > 0) actions.push(`升级${upgraded}`);
+            }
+        }
 
         // 批量操作
         const batchOps = [];
@@ -830,25 +861,23 @@ class FarmConnection extends EventEmitter {
         const friends = friendsReply.game_friends || [];
         if (friends.length === 0) return;
 
+        // 智能预筛选好友
+        const { friendsToVisit, skippedCount, totalFriends } = await this.friendOptimizer.getOptimizedFriends(
+            friends,
+            {
+                autoSteal: this.config.enableSteal,
+                friendHelp: this.config.enableFriendHelp,
+            }
+        );
+
+        if (friendsToVisit.length === 0) return;
+
         let totalSteal = 0;
         let totalHelp = 0;
 
-        for (const friend of friends) {
-            const gid = toNum(friend.gid);
-            if (gid === this.userState.gid) continue;
-
-            const name = friend.remark || friend.name || `GID:${gid}`;
-            const p = friend.plant;
-
-            const stealNum = p ? toNum(p.steal_plant_num) : 0;
-            const dryNum = p ? toNum(p.dry_num) : 0;
-            const weedNum = p ? toNum(p.weed_num) : 0;
-            const insectNum = p ? toNum(p.insect_num) : 0;
-
-            const hasSteal = stealNum > 0;
-            const hasHelp = dryNum > 0 || weedNum > 0 || insectNum > 0;
-
-            if (!hasSteal && !hasHelp) continue;
+        for (const friendInfo of friendsToVisit) {
+            const gid = friendInfo.gid;
+            const name = friendInfo.name;
 
             try {
                 const enterBody = types.VisitEnterRequest.encode(types.VisitEnterRequest.create({
@@ -864,35 +893,16 @@ class FarmConnection extends EventEmitter {
                     continue;
                 }
 
-                // 分析好友土地
-                const stealable = [];
-                const needWater = [];
-                const needWeed = [];
-                const needBug = [];
+                // 使用优化器分析好友土地
+                const landAnalysis = this.friendOptimizer.analyzeFriendLands(lands, {
+                    skipStealRadish: this.config.skipStealRadish,
+                    myGid: this.userState.gid,
+                });
 
-                for (const land of lands) {
-                    const id = toNum(land.id);
-                    const plant = land.plant;
-                    if (!plant || !plant.phases || plant.phases.length === 0) continue;
-
-                    const nowSec = require('./utils').getServerTimeSec();
-                    let currentPhase = null;
-                    for (let i = plant.phases.length - 1; i >= 0; i--) {
-                        const beginTime = require('./utils').toTimeSec(plant.phases[i].begin_time);
-                        if (beginTime > 0 && beginTime <= nowSec) {
-                            currentPhase = plant.phases[i];
-                            break;
-                        }
-                    }
-                    if (!currentPhase) continue;
-
-                    if (currentPhase.phase === PlantPhase.MATURE && plant.stealable) {
-                        stealable.push(id);
-                    }
-                    if (toNum(plant.dry_num) > 0) needWater.push(id);
-                    if (plant.weed_owners && plant.weed_owners.length > 0) needWeed.push(id);
-                    if (plant.insect_owners && plant.insect_owners.length > 0) needBug.push(id);
-                }
+                const stealable = landAnalysis.stealable;
+                const needWater = landAnalysis.needWater;
+                const needWeed = landAnalysis.needWeed;
+                const needBug = landAnalysis.needBug;
 
                 const actions = [];
 
@@ -1158,6 +1168,10 @@ class FarmConnection extends EventEmitter {
             clearInterval(this.connectionMonitorTimer);
             this.connectionMonitorTimer = null;
         }
+        // 停止每日奖励系统
+        if (this.dailyRewards) {
+            this.dailyRewards.stop();
+        }
         this.pendingCallbacks.clear();
     }
 
@@ -1191,7 +1205,8 @@ class FarmConnection extends EventEmitter {
                 } : null
             },
             stats: { ...this.stats },
-            config: { ...this.config }
+            config: { ...this.config },
+            dailyRewards: this.dailyRewards ? this.dailyRewards.getStatus() : null,
         };
     }
 

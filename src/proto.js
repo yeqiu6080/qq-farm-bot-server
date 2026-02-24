@@ -22,6 +22,11 @@ async function loadProto() {
         path.join(protoDir, 'notifypb.proto'),
         path.join(protoDir, 'taskpb.proto'),
         path.join(protoDir, 'itempb.proto'),
+        path.join(protoDir, 'mallpb.proto'),
+        path.join(protoDir, 'emailpb.proto'),
+        path.join(protoDir, 'sharepb.proto'),
+        path.join(protoDir, 'qqvippb.proto'),
+        path.join(protoDir, 'illustratedpb.proto'),
     ], { keepCase: true });
 
     // 网关
@@ -100,6 +105,45 @@ async function loadProto() {
     types.ItemNotify = root.lookupType('gamepb.itempb.ItemNotify');
     types.GoodsUnlockNotify = root.lookupType('gamepb.shoppb.GoodsUnlockNotify');
     types.TaskInfoNotify = root.lookupType('gamepb.taskpb.TaskInfoNotify');
+
+    // 商城
+    types.GetMallListBySlotTypeRequest = root.lookupType('gamepb.mallpb.GetMallListBySlotTypeRequest');
+    types.GetMallListBySlotTypeResponse = root.lookupType('gamepb.mallpb.GetMallListBySlotTypeResponse');
+    types.MallGoods = root.lookupType('gamepb.mallpb.MallGoods');
+    types.PurchaseRequest = root.lookupType('gamepb.mallpb.PurchaseRequest');
+    types.PurchaseResponse = root.lookupType('gamepb.mallpb.PurchaseResponse');
+    types.GetMonthCardInfosRequest = root.lookupType('gamepb.mallpb.GetMonthCardInfosRequest');
+    types.GetMonthCardInfosReply = root.lookupType('gamepb.mallpb.GetMonthCardInfosReply');
+    types.ClaimMonthCardRewardRequest = root.lookupType('gamepb.mallpb.ClaimMonthCardRewardRequest');
+    types.ClaimMonthCardRewardReply = root.lookupType('gamepb.mallpb.ClaimMonthCardRewardReply');
+
+    // 邮箱
+    types.GetEmailListRequest = root.lookupType('gamepb.emailpb.GetEmailListRequest');
+    types.GetEmailListReply = root.lookupType('gamepb.emailpb.GetEmailListReply');
+    types.ClaimEmailRequest = root.lookupType('gamepb.emailpb.ClaimEmailRequest');
+    types.ClaimEmailReply = root.lookupType('gamepb.emailpb.ClaimEmailReply');
+    types.BatchClaimEmailRequest = root.lookupType('gamepb.emailpb.BatchClaimEmailRequest');
+    types.BatchClaimEmailReply = root.lookupType('gamepb.emailpb.BatchClaimEmailReply');
+
+    // 分享
+    types.CheckCanShareRequest = root.lookupType('gamepb.sharepb.CheckCanShareRequest');
+    types.CheckCanShareReply = root.lookupType('gamepb.sharepb.CheckCanShareReply');
+    types.ReportShareRequest = root.lookupType('gamepb.sharepb.ReportShareRequest');
+    types.ReportShareReply = root.lookupType('gamepb.sharepb.ReportShareReply');
+    types.ClaimShareRewardRequest = root.lookupType('gamepb.sharepb.ClaimShareRewardRequest');
+    types.ClaimShareRewardReply = root.lookupType('gamepb.sharepb.ClaimShareRewardReply');
+
+    // QQ会员
+    types.GetDailyGiftStatusRequest = root.lookupType('gamepb.qqvippb.GetDailyGiftStatusRequest');
+    types.GetDailyGiftStatusReply = root.lookupType('gamepb.qqvippb.GetDailyGiftStatusReply');
+    types.ClaimDailyGiftRequest = root.lookupType('gamepb.qqvippb.ClaimDailyGiftRequest');
+    types.ClaimDailyGiftReply = root.lookupType('gamepb.qqvippb.ClaimDailyGiftReply');
+
+    // 图鉴
+    types.GetIllustratedListV2Request = root.lookupType('gamepb.illustratedpb.GetIllustratedListV2Request');
+    types.GetIllustratedListV2Reply = root.lookupType('gamepb.illustratedpb.GetIllustratedListV2Reply');
+    types.ClaimAllRewardsV2Request = root.lookupType('gamepb.illustratedpb.ClaimAllRewardsV2Request');
+    types.ClaimAllRewardsV2Reply = root.lookupType('gamepb.illustratedpb.ClaimAllRewardsV2Reply');
 }
 
 function getRoot() {

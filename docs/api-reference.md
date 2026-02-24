@@ -506,4 +506,641 @@ GET /api/status
 ```json
 {
   "success": true,
-  "data
+  "data": {
+    "550e8400-e29b-41d4-a716-446655440000": { ... },
+    "550e8400-e29b-41d4-a716-446655440001": { ... }
+  }
+}
+```
+
+---
+
+#### 12. 获取账号连接状态
+
+获取指定账号的连接状态信息。
+
+**请求**
+
+```http
+GET /api/accounts/:id/connection
+```
+
+**响应示例**
+
+```json
+{
+  "success": true,
+  "data": {
+    "isRunning": true,
+    "isConnected": true,
+    "connectionState": "connected",
+    "disconnectedAt": null,
+    "disconnectedReason": null,
+    "lastPongAgo": 5000,
+    "userState": { ... }
+  }
+}
+```
+
+---
+
+#### 13. 获取所有账号连接状态
+
+获取所有账号的连接状态。
+
+**请求**
+
+```http
+GET /api/connections
+```
+
+---
+
+#### 14. 清理已停止的连接
+
+清理已停止的连接实例。
+
+**请求**
+
+```http
+POST /api/cleanup
+```
+
+**响应示例**
+
+```json
+{
+  "success": true,
+  "message": "已清理已停止的连接"
+}
+```
+
+---
+
+### 操作执行
+
+#### 15. 执行单次操作
+
+对指定账号执行单次操作。
+
+**请求**
+
+```http
+POST /api/accounts/:id/action
+Content-Type: application/json
+```
+
+**请求体参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| action | string | 是 | 操作名称 |
+
+**支持的 action 值**
+
+| action | 说明 |
+|--------|------|
+| checkFarm | 立即检查农场状态 |
+| sellFruits | 立即出售仓库果实 |
+| claimTasks | 立即领取任务奖励 |
+
+**请求示例**
+
+```json
+{
+  "action": "checkFarm"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "message": "农场检查完成"
+  }
+}
+```
+
+---
+
+### 日志与统计
+
+#### 16. 获取账号日志
+
+获取指定账号的最近日志。
+
+**请求**
+
+```http
+GET /api/accounts/:id/logs?limit=100
+```
+
+**查询参数**
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| limit | number | 100 | 返回日志条数上限 |
+
+**响应示例**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "time": "2026-02-24T12:00:00.000Z",
+      "tag": "农场",
+      "message": "收获3/浇水2/除草1"
+    },
+    {
+      "time": "2026-02-24T11:59:00.000Z",
+      "tag": "好友",
+      "message": "小明: 偷2/除草1"
+    }
+  ]
+}
+```
+
+---
+
+#### 17. 获取统计数据
+
+获取服务器整体统计数据。
+
+**请求**
+
+```http
+GET /api/stats
+```
+
+**响应示例**
+
+```json
+{
+  "success": true,
+  "data": {
+    "totalAccounts": 5,
+    "runningAccounts": 3,
+    "totalHarvests": 500,
+    "totalSteals": 200
+  }
+}
+```
+
+---
+
+## WebSocket API
+
+WebSocket 用于实时通信，服务器会主动推送账号状态更新、日志等信息。
+
+### 连接
+
+```javascript
+const ws = new WebSocket('ws://localhost:3456');
+```
+
+### 消息格式
+
+所有 WebSocket 消息均为 JSON 格式：
+
+```json
+{
+  "type": "messageType",
+  "accountId": "uuid",
+  "data": { ... }
+}
+```
+
+### 客户端发送的消息
+
+#### 订阅账号更新
+
+```json
+{
+  "action": "subscribe",
+  "accountId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+使用 `"all"` 订阅所有账号：
+
+```json
+{
+  "action": "subscribe",
+  "accountId": "all"
+}
+```
+
+#### 取消订阅
+
+```json
+{
+  "action": "unsubscribe",
+  "accountId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+#### 获取账号列表
+
+```json
+{
+  "action": "getAccounts"
+}
+```
+
+#### 获取状态
+
+```json
+{
+  "action": "getStatus"
+}
+```
+
+### 服务器推送的消息
+
+#### 连接确认
+
+```json
+{
+  "type": "connected",
+  "clientId": "uuid",
+  "message": "已连接到QQ农场服务器"
+}
+```
+
+#### 账号列表
+
+```json
+{
+  "type": "accounts",
+  "data": [ ... ]
+}
+```
+
+#### 状态更新
+
+```json
+{
+  "type": "status",
+  "data": { ... }
+}
+```
+
+#### 账号连接成功
+
+```json
+{
+  "type": "accountConnected",
+  "accountId": "uuid",
+  "data": { ... }
+}
+```
+
+#### 账号断开连接
+
+```json
+{
+  "type": "accountDisconnected",
+  "accountId": "uuid",
+  "data": {
+    "code": 1000,
+    "reason": "",
+    "time": "2026-02-24T12:00:00.000Z"
+  }
+}
+```
+
+#### 连接丢失
+
+```json
+{
+  "type": "connectionLost",
+  "accountId": "uuid",
+  "data": {
+    "reason": "连接超时，长时间未收到服务器响应",
+    "lastPongTime": 1708771200000,
+    "disconnectedAt": "2026-02-24T12:00:00.000Z"
+  }
+}
+```
+
+#### 账号停止
+
+```json
+{
+  "type": "accountStopped",
+  "accountId": "uuid"
+}
+```
+
+#### 状态变更
+
+```json
+{
+  "type": "stateChanged",
+  "accountId": "uuid",
+  "data": {
+    "level": 31,
+    "gold": 15000,
+    "exp": 55000
+  }
+}
+```
+
+#### 统计变更
+
+```json
+{
+  "type": "statsChanged",
+  "accountId": "uuid",
+  "data": {
+    "harvests": 101,
+    "steals": 51
+  }
+}
+```
+
+#### 日志推送
+
+```json
+{
+  "type": "log",
+  "accountId": "uuid",
+  "data": {
+    "time": "2026-02-24T12:00:00.000Z",
+    "tag": "农场",
+    "message": "收获3/浇水2"
+  }
+}
+```
+
+---
+
+## 扫码登录 API
+
+QQ 平台支持通过扫码方式获取登录授权码。
+
+### 流程概述
+
+1. 创建扫码会话 (`POST /api/qr-login`)
+2. 获取二维码 URL (`GET /api/qr-login/:sessionId/url`)
+3. 轮询扫码状态 (`GET /api/qr-login/:sessionId/status`)
+
+### API 端点
+
+#### 1. 创建扫码会话
+
+**请求**
+
+```http
+POST /api/qr-login
+```
+
+**响应示例**
+
+```json
+{
+  "success": true,
+  "data": {
+    "sessionId": "session-uuid",
+    "status": "pending",
+    "message": "请获取二维码并扫码"
+  }
+}
+```
+
+---
+
+#### 2. 获取二维码 URL
+
+**请求**
+
+```http
+GET /api/qr-login/:sessionId/url
+```
+
+**响应示例**
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://h5.qzone.qq.com/qqq/code/xxx",
+    "loginCode": "xxx"
+  }
+}
+```
+
+---
+
+#### 3. 查询扫码状态
+
+**请求**
+
+```http
+GET /api/qr-login/:sessionId/status
+```
+
+**响应示例 - 等待中**
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "waiting",
+    "message": "等待扫码"
+  }
+}
+```
+
+**响应示例 - 扫码成功**
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "success",
+    "code": "auth_code_for_farm_login"
+  }
+}
+```
+
+**响应示例 - 二维码过期**
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "expired",
+    "message": "二维码已过期"
+  }
+}
+```
+
+### 状态说明
+
+| 状态 | 说明 |
+|------|------|
+| pending | 等待获取二维码 |
+| waiting | 等待用户扫码 |
+| success | 扫码成功，返回登录码 |
+| expired | 二维码已过期 |
+
+---
+
+## 错误码说明
+
+### HTTP 错误
+
+| 错误码 | 说明 | 处理建议 |
+|--------|------|----------|
+| 400 | 请求参数错误 | 检查请求体参数是否完整、格式是否正确 |
+| 404 | 资源不存在 | 检查账号 ID 是否正确 |
+| 500 | 服务器内部错误 | 查看服务器日志，检查配置是否正确 |
+
+### 业务错误
+
+| 错误信息 | 说明 | 处理建议 |
+|----------|------|----------|
+| 账号不存在 | 指定的账号 ID 未找到 | 检查账号 ID 是否正确 |
+| 名称和登录码不能为空 | 添加账号时必填字段缺失 | 确保 name 和 code 字段已提供 |
+| 登录码已过期 | QQ 授权码已失效 | 重新扫码获取新的登录码 |
+| 连接超时 | WebSocket 连接超时 | 检查网络连接，稍后重试 |
+| 账号未运行 | 对未启动的账号执行操作 | 先调用启动接口 |
+| 未知操作 | action 参数值不支持 | 检查 action 值是否在支持列表中 |
+
+---
+
+## 数据模型
+
+### Account（账号）
+
+```typescript
+interface Account {
+  id: string;              // UUID
+  name: string;            // 账号名称
+  code: string;            // 登录授权码
+  platform: 'qq' | 'wx';   // 平台类型
+  config: AccountConfig;   // 账号配置
+  createdAt: string;       // ISO 8601 时间
+  updatedAt: string;       // ISO 8601 时间
+}
+```
+
+### AccountConfig（账号配置）
+
+```typescript
+interface AccountConfig {
+  farmCheckInterval: number;      // 农场检查间隔（秒）
+  friendCheckInterval: number;    // 好友检查间隔（秒）
+  forceLowestLevelCrop: boolean;  // 强制种植最低等级作物
+  enableFriendHelp: boolean;      // 启用帮助好友
+  enableSteal: boolean;           // 启用偷菜
+  enableSell: boolean;            // 启用自动出售
+  enableTask: boolean;            // 启用自动领任务
+}
+```
+
+### AccountStatus（账号状态）
+
+```typescript
+interface AccountStatus {
+  id: string;
+  isRunning: boolean;           // 是否正在运行
+  isConnected: boolean;         // 是否已连接
+  connectionState: string;      // 连接状态
+  disconnectedAt: string | null; // 断开时间
+  disconnectedReason: string | null; // 断开原因
+  lastPongTime: number;         // 最后收到消息时间
+  lastPongAgo: number | null;   // 距最后消息时间（毫秒）
+  userState: UserState;         // 用户游戏状态
+  stats: Stats;                 // 统计数据
+  config: AccountConfig;        // 配置
+}
+```
+
+### UserState（用户状态）
+
+```typescript
+interface UserState {
+  gid: number;          // 游戏用户ID
+  name: string;         // 用户昵称
+  level: number;        // 等级
+  gold: number;         // 金币
+  exp: number;          // 经验值
+  expProgress?: {       // 经验进度（计算字段）
+    current: number;
+    needed: number;
+    percent: number;
+  };
+}
+```
+
+### Stats（统计数据）
+
+```typescript
+interface Stats {
+  harvests: number;     // 收获次数
+  steals: number;       // 偷菜次数
+  helps: number;        // 帮助次数
+  sells: number;        // 出售次数
+  tasks: number;        // 完成任务数
+  startTime: string;    // 启动时间
+}
+```
+
+### LogEntry（日志条目）
+
+```typescript
+interface LogEntry {
+  time: string;     // ISO 8601 时间
+  tag: string;      // 标签（农场/好友/系统/连接/错误等）
+  message: string;  // 日志内容
+}
+```
+
+---
+
+## SDK 使用示例
+
+项目提供了 Node.js SDK 简化 API 调用：
+
+```javascript
+const QFarmSDK = require('./sdk');
+
+const sdk = new QFarmSDK({
+  baseURL: 'http://localhost:3456'
+});
+
+// 添加并启动账号
+async function main() {
+  // 添加账号
+  const account = await sdk.addAccount({
+    name: '我的农场',
+    code: 'auth_code',
+    platform: 'qq'
+  });
+  
+  // 启动账号
+  await sdk.startAccount(account.id);
+  
+  // 获取状态
+  const status = await sdk.getAccountStatus(account.id);
+  console.log('等级:', status.userState.level);
+  
+  // 连接 WebSocket 接收实时更新
+  await sdk.connectWebSocket();
+  sdk.subscribe('all');
+  
+  sdk.on('accountUpdate', (msg) => {
+    console.log('收到更新:', msg);
+  });
+}
+
+main().catch(console.error);
+```
+
+更多 SDK 用法请参考 [sdk/index.js](../sdk/index.js) 和 [sdk/example.js](../sdk/example.js)。
