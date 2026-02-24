@@ -23,7 +23,7 @@ const wss = new WebSocket.Server({ server });
 
 // 中间件
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 全局状态
@@ -32,6 +32,33 @@ const farmManager = new FarmManager(accountManager);
 
 // WebSocket连接管理
 const clients = new Map();
+
+// 性能优化：批量广播队列
+const broadcastQueue = [];
+const BROADCAST_INTERVAL = 100; // 100ms批量发送一次
+
+// 性能优化：定期清理已停止的连接
+setInterval(() => {
+    farmManager.cleanupStoppedConnections();
+}, 60000); // 每分钟清理一次
+
+// 批量广播处理
+setInterval(() => {
+    if (broadcastQueue.length === 0) return;
+    
+    const messages = broadcastQueue.splice(0);
+    const msgStr = JSON.stringify({ type: 'batch', messages });
+    
+    clients.forEach((client) => {
+        if (client.ws.readyState === WebSocket.OPEN) {
+            try {
+                client.ws.send(msgStr);
+            } catch (e) {
+                // 发送失败，忽略
+            }
+        }
+    });
+}, BROADCAST_INTERVAL);
 
 wss.on('connection', (ws, req) => {
     const clientId = uuidv4();
@@ -96,16 +123,23 @@ function handleWebSocketMessage(clientId, data) {
     }
 }
 
-// 广播消息给订阅者
+// 广播消息给订阅者（使用批量队列优化）
 function broadcastToSubscribers(accountId, message) {
-    const msgStr = JSON.stringify(message);
-    clients.forEach((client, clientId) => {
-        if (client.subscriptions.has(accountId) || client.subscriptions.has('all')) {
-            if (client.ws.readyState === WebSocket.OPEN) {
-                client.ws.send(msgStr);
+    broadcastQueue.push({ accountId, message, timestamp: Date.now() });
+    
+    // 如果是重要消息，立即发送
+    if (message.type === 'accountConnected' || message.type === 'accountDisconnected') {
+        const msgStr = JSON.stringify(message);
+        clients.forEach((client) => {
+            if (client.subscriptions.has(accountId) || client.subscriptions.has('all')) {
+                if (client.ws.readyState === WebSocket.OPEN) {
+                    try {
+                        client.ws.send(msgStr);
+                    } catch (e) {}
+                }
             }
-        }
-    });
+        });
+    }
 }
 
 // 设置广播回调
@@ -254,15 +288,119 @@ app.get('/api/accounts/:id/logs', (req, res) => {
 
 // 获取统计数据
 app.get('/api/stats', (req, res) => {
+    const memUsage = process.memoryUsage();
     res.json({
         success: true,
         data: {
             totalAccounts: accountManager.getAllAccounts().length,
             runningAccounts: farmManager.getRunningCount(),
             totalHarvests: farmManager.getTotalHarvests(),
-            totalSteals: farmManager.getTotalSteals()
+            totalSteals: farmManager.getTotalSteals(),
+            memory: {
+                rss: Math.round(memUsage.rss / 1024 / 1024) + 'MB',
+                heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
+                external: Math.round(memUsage.external / 1024 / 1024) + 'MB',
+            },
+            uptime: process.uptime(),
+            wsClients: clients.size,
         }
     });
+});
+
+// 获取服务器健康状态
+app.get('/api/health', (req, res) => {
+    const memUsage = process.memoryUsage();
+    res.json({
+        success: true,
+        data: {
+            status: 'ok',
+            timestamp: Date.now(),
+            memory: {
+                rss: memUsage.rss,
+                heapTotal: memUsage.heapTotal,
+                heapUsed: memUsage.heapUsed,
+            },
+            uptime: process.uptime(),
+        }
+    });
+});
+
+// 获取账号每日奖励状态
+app.get('/api/accounts/:id/daily-rewards', (req, res) => {
+    const status = farmManager.getAccountStatus(req.params.id);
+    if (!status) {
+        return res.status(404).json({ success: false, message: '账号未运行' });
+    }
+    res.json({
+        success: true,
+        data: status.dailyRewards || { dailyRewardState: {}, toggles: {} }
+    });
+});
+
+// 触发每日奖励领取
+app.post('/api/accounts/:id/daily-rewards/claim', async (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection || !connection.dailyRewards) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+        
+        await connection.dailyRewards.runDailyRewards();
+        res.json({ success: true, message: '每日奖励领取完成' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 获取土地详情
+app.get('/api/accounts/:id/lands', async (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection || !connection.landManager) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+        
+        const landStatus = await connection.landManager.getDetailedLandStatus();
+        if (!landStatus) {
+            return res.status(500).json({ success: false, message: '获取土地状态失败' });
+        }
+        
+        res.json({ success: true, data: landStatus });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 解锁指定土地
+app.post('/api/accounts/:id/lands/:landId/unlock', async (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection || !connection.landManager) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+        
+        const landId = parseInt(req.params.landId);
+        const result = await connection.landManager.unlockLand(landId);
+        res.json({ success: true, data: result });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 升级指定土地
+app.post('/api/accounts/:id/lands/:landId/upgrade', async (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection || !connection.landManager) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+        
+        const landId = parseInt(req.params.landId);
+        const result = await connection.landManager.upgradeLand(landId);
+        res.json({ success: true, data: result });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
 });
 
 // 启动所有账号
