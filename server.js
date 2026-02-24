@@ -28,7 +28,16 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // 全局状态
 const accountManager = new AccountManager();
-const farmManager = new FarmManager(accountManager);
+
+// 进程隔离配置（默认关闭，可通过环境变量或API开启）
+const useProcessIsolation = process.env.USE_PROCESS_ISOLATION === 'true';
+const farmManager = new FarmManager(accountManager, {
+    useProcessIsolation: useProcessIsolation,
+    maxWorkers: parseInt(process.env.MAX_WORKERS) || 50
+});
+
+console.log(`[服务器] 进程隔离模式: ${useProcessIsolation ? '已启用' : '已禁用'}`);
+console.log(`[服务器] 最大Worker数量: ${farmManager.maxWorkers}`);
 
 // WebSocket连接管理
 const clients = new Map();
@@ -535,6 +544,137 @@ app.get('/api/qr-login/:sessionId/status', async (req, res) => {
         console.error(`[扫码状态查询错误] sessionId=${req.params.sessionId}, error=${error.message}`);
         res.status(500).json({ success: false, message: error.message });
     }
+});
+
+// ============ 进程隔离控制 API ============
+
+// 获取进程隔离状态
+app.get('/api/process-isolation', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            enabled: farmManager.isProcessIsolationEnabled(),
+            maxWorkers: farmManager.maxWorkers,
+            currentWorkers: farmManager.workers.size,
+            currentConnections: farmManager.connections.size
+        }
+    });
+});
+
+// 设置进程隔离状态（需要重启账号生效）
+app.post('/api/process-isolation', (req, res) => {
+    try {
+        const { enabled } = req.body;
+        const currentState = farmManager.isProcessIsolationEnabled();
+        
+        if (enabled === currentState) {
+            return res.json({
+                success: true,
+                message: `进程隔离已经是${enabled ? '启用' : '禁用'}状态`,
+                data: { enabled }
+            });
+        }
+
+        farmManager.setProcessIsolation(enabled);
+        
+        res.json({
+            success: true,
+            message: `进程隔离已${enabled ? '启用' : '禁用'}，新启动的账号将使用${enabled ? 'Worker' : '单进程'}模式`,
+            data: { enabled }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ============ 离线提醒 API ============
+
+// 获取离线提醒配置
+app.get('/api/offline-reminder', (req, res) => {
+    const config = farmManager.getOfflineReminder();
+    res.json({
+        success: true,
+        data: config || {
+            enabled: false,
+            channel: 'webhook',
+            endpoint: '',
+            token: '',
+            title: 'QQ农场账号离线提醒',
+            message: '您的农场账号已离线',
+            reloginUrlMode: 'none'
+        }
+    });
+});
+
+// 设置离线提醒配置
+app.post('/api/offline-reminder', (req, res) => {
+    try {
+        const config = req.body;
+        
+        // 验证配置
+        if (config.enabled && !config.channel) {
+            return res.status(400).json({
+                success: false,
+                message: '启用离线提醒时需要指定推送渠道'
+            });
+        }
+
+        farmManager.setOfflineReminder(config);
+        
+        res.json({
+            success: true,
+            message: '离线提醒配置已保存',
+            data: config
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 测试离线提醒
+app.post('/api/offline-reminder/test', async (req, res) => {
+    try {
+        const config = req.body;
+        
+        // 这里应该调用实际的推送服务
+        // 暂时返回成功，实际实现需要集成 pushoo 或其他推送库
+        res.json({
+            success: true,
+            message: '测试消息已发送（实际推送功能待集成）',
+            data: {
+                channel: config.channel,
+                title: config.title || '测试标题',
+                message: config.message || '测试消息'
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ============ 服务器统计 API ============
+
+// 获取服务器统计信息
+app.get('/api/stats/detailed', (req, res) => {
+    const memUsage = process.memoryUsage();
+    const farmStats = farmManager.getStats();
+    
+    res.json({
+        success: true,
+        data: {
+            ...farmStats,
+            memory: {
+                rss: Math.round(memUsage.rss / 1024 / 1024) + 'MB',
+                heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + 'MB',
+                heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
+                external: Math.round(memUsage.external / 1024 / 1024) + 'MB',
+            },
+            uptime: process.uptime(),
+            wsClients: clients.size,
+            nodeVersion: process.version,
+            platform: process.platform
+        }
+    });
 });
 
 // 辅助函数：获取登录码
