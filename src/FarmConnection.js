@@ -8,7 +8,30 @@ const EventEmitter = require('events');
 const { CONFIG, PlantPhase, PHASE_NAMES } = require('./config');
 const { types } = require('./proto');
 const { toLong, toNum, syncServerTime, sleep, log, logWarn } = require('./utils');
-const { getPlantNameBySeedId, getPlantName, getPlantExp, getItemName } = require('./gameConfig');
+const { getPlantNameBySeedId, getPlantName, getPlantExp, getItemName, getLevelExpProgress, getFruitName } = require('./gameConfig');
+const { getPlantingRecommendation } = require('../tools/calc-exp-yield');
+
+// 加载种子商店数据用于果实识别
+let seedShopData = null;
+let fruitIdSet = null;
+function loadSeedShopData() {
+    if (fruitIdSet) return fruitIdSet;
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        const dataPath = path.join(__dirname, '..', 'tools', 'seed-shop-merged-export.json');
+        const rawData = fs.readFileSync(dataPath, 'utf8');
+        const data = JSON.parse(rawData);
+        const rows = data.rows || [];
+        fruitIdSet = new Set(
+            rows.map(row => Number(row.fruitId)).filter(Number.isFinite)
+        );
+        return fruitIdSet;
+    } catch (e) {
+        // 如果加载失败，使用默认的果实ID范围
+        return null;
+    }
+}
 
 class FarmConnection extends EventEmitter {
     constructor(account) {
@@ -716,14 +739,41 @@ class FarmConnection extends EventEmitter {
 
             if (available.length === 0) return;
 
-            // 选择策略
-            if (this.config.forceLowestLevelCrop || this.userState.level <= 28) {
-                available.sort((a, b) => a.requiredLevel - b.requiredLevel);
-            } else {
-                available.sort((a, b) => b.requiredLevel - a.requiredLevel);
-            }
+            // 选择策略：优先使用经验效率算法
+            let bestSeed = null;
             
-            const bestSeed = available[0];
+            if (this.config.forceLowestLevelCrop) {
+                // 强制最低等级作物
+                available.sort((a, b) => a.requiredLevel - b.requiredLevel || a.price - b.price);
+                bestSeed = available[0];
+            } else {
+                // 使用智能种子选择算法
+                try {
+                    const rec = getPlantingRecommendation(this.userState.level, unlockedLandCount || 18, { top: 50 });
+                    const rankedSeedIds = rec.candidatesNormalFert.map(x => x.seedId);
+                    
+                    // 按经验效率排序查找可用种子
+                    for (const seedId of rankedSeedIds) {
+                        const hit = available.find(x => x.seedId === seedId);
+                        if (hit) {
+                            bestSeed = hit;
+                            break;
+                        }
+                    }
+                } catch (e) {
+                    // 算法失败时使用兜底策略
+                }
+                
+                // 兜底策略：28级以前种白萝卜，28级以上选最高等级
+                if (!bestSeed) {
+                    if (this.userState.level <= 28) {
+                        available.sort((a, b) => a.requiredLevel - b.requiredLevel);
+                    } else {
+                        available.sort((a, b) => b.requiredLevel - a.requiredLevel);
+                    }
+                    bestSeed = available[0];
+                }
+            }
             const seedName = getPlantNameBySeedId(bestSeed.seedId);
 
             // 购买
@@ -952,47 +1002,86 @@ class FarmConnection extends EventEmitter {
         }, 60000);
     }
 
+    isFruitId(id) {
+        const fruitSet = loadSeedShopData();
+        if (fruitSet) {
+            return fruitSet.has(toNum(id));
+        }
+        // 兜底：使用ID范围判断
+        return id >= 1030000 && id < 1040000;
+    }
+
     async sellFruits() {
         try {
             const body = types.BagRequest.encode(types.BagRequest.create({})).finish();
             const { body: replyBody } = await this.sendMsgAsync('gamepb.itempb.ItemService', 'Bag', body);
             const bagReply = types.BagReply.decode(replyBody);
 
-            const items = bagReply.items || [];
+            // 兼容 item_bag 与旧版 items
+            const items = (bagReply.item_bag && bagReply.item_bag.items) 
+                ? bagReply.item_bag.items 
+                : (bagReply.items || []);
             const fruitsToSell = [];
+            const fruitNames = [];
 
             for (const item of items) {
                 const id = toNum(item.id);
                 const count = toNum(item.count);
-                // 果实ID范围
-                if (id >= 1030000 && id < 1040000 && count > 0) {
-                    fruitsToSell.push({ id, count });
+                const uid = item.uid ? toNum(item.uid) : 0;
+                
+                // 使用种子数据精确判断是否为果实
+                if (this.isFruitId(id) && count > 0 && uid !== 0) {
+                    fruitsToSell.push(item);
+                    fruitNames.push(`${getFruitName(id)}x${count}`);
                 }
             }
 
             if (fruitsToSell.length === 0) return;
 
-            let totalSold = 0;
+            // 使用批量出售接口
             let totalGold = 0;
-
-            for (const fruit of fruitsToSell) {
-                try {
-                    const sellBody = types.SellRequest.encode(types.SellRequest.create({
-                        item_id: toLong(fruit.id),
-                        count: toLong(fruit.count),
-                    })).finish();
-                    const { body: sellReplyBody } = await this.sendMsgAsync('gamepb.itempb.ItemService', 'Sell', sellBody);
-                    const sellReply = types.SellReply.decode(sellReplyBody);
-                    
-                    if (sellReply.gold) {
-                        totalSold += fruit.count;
-                        totalGold += toNum(sellReply.gold);
+            try {
+                const sellItems = fruitsToSell.map(item => ({
+                    id: item.id != null ? toLong(item.id) : undefined,
+                    count: item.count != null ? toLong(item.count) : undefined,
+                    uid: item.uid != null ? toLong(item.uid) : undefined,
+                }));
+                
+                const sellBody = types.SellRequest.encode(types.SellRequest.create({ items: sellItems })).finish();
+                const { body: sellReplyBody } = await this.sendMsgAsync('gamepb.itempb.ItemService', 'Sell', sellBody);
+                const sellReply = types.SellReply.decode(sellReplyBody);
+                
+                // 从 get_items 中提取金币
+                if (sellReply.get_items && sellReply.get_items.length > 0) {
+                    for (const item of sellReply.get_items) {
+                        if (toNum(item.id) === 1001) { // 金币ID
+                            totalGold += toNum(item.count);
+                        }
                     }
-                } catch (e) {}
+                } else if (sellReply.gold) {
+                    totalGold = toNum(sellReply.gold);
+                }
+            } catch (e) {
+                // 批量失败时回退到逐个出售
+                for (const fruit of fruitsToSell) {
+                    try {
+                        const sellBody = types.SellRequest.encode(types.SellRequest.create({
+                            item_id: toLong(fruit.id),
+                            count: toLong(fruit.count),
+                        })).finish();
+                        const { body: sellReplyBody } = await this.sendMsgAsync('gamepb.itempb.ItemService', 'Sell', sellBody);
+                        const sellReply = types.SellReply.decode(sellReplyBody);
+                        
+                        if (sellReply.gold) {
+                            totalGold += toNum(sellReply.gold);
+                        }
+                    } catch (e) {}
+                }
             }
 
+            const totalSold = fruitsToSell.reduce((sum, item) => sum + toNum(item.count), 0);
             if (totalSold > 0) {
-                this.addLog('仓库', `出售 ${totalSold} 个果实，获得 ${totalGold} 金币`);
+                this.addLog('仓库', `出售 ${fruitNames.join(', ')}，获得 ${totalGold} 金币`);
                 this.stats.sells += totalSold;
                 this.emit('statsChanged', { ...this.stats });
             }
@@ -1078,6 +1167,12 @@ class FarmConnection extends EventEmitter {
         const now = Date.now();
         const lastPongAgo = this.lastPongTime ? now - this.lastPongTime : null;
         
+        // 计算经验进度
+        let expProgress = null;
+        if (this.userState.level > 0 && this.userState.exp >= 0) {
+            expProgress = getLevelExpProgress(this.userState.level, this.userState.exp);
+        }
+        
         return {
             id: this.id,
             isRunning: this.isRunning,
@@ -1087,7 +1182,14 @@ class FarmConnection extends EventEmitter {
             disconnectedReason: this.disconnectedReason,
             lastPongTime: this.lastPongTime,
             lastPongAgo: lastPongAgo,
-            userState: { ...this.userState },
+            userState: { 
+                ...this.userState,
+                expProgress: expProgress ? {
+                    current: expProgress.current,
+                    needed: expProgress.needed,
+                    percent: Math.floor((expProgress.current / expProgress.needed) * 100)
+                } : null
+            },
             stats: { ...this.stats },
             config: { ...this.config }
         };
