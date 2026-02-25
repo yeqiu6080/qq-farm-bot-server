@@ -6,16 +6,23 @@
   "scripts": {
     "sv": "node server.js",
     "dev": "node server.js",
-    "start": "pm2 start ecosystem.config.js"
+    "start": "pm2 start ecosystem.config.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "axios": "^1.13.5",
+    "cors": "^2.8.5",
     "express": "^4.18.2",
     "long": "^5.3.2",
     "protobufjs": "^8.0.0",
     "qrcode-terminal": "^0.12.0",
-    "ws": "^8.19.0",
-    "cors": "^2.8.5",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0",
+    "supertest": "^7.2.2"
   }
 }
