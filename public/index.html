@@ -27,6 +27,10 @@
                     <span class="material-symbols-rounded nav-icon">group</span>
                     <span class="nav-label">账号管理</span>
                 </a>
+                <a href="#analytics" class="nav-item" data-page="analytics">
+                    <span class="material-symbols-rounded nav-icon">analytics</span>
+                    <span class="nav-label">数据分析</span>
+                </a>
                 <a href="#logs" class="nav-item" data-page="logs">
                     <span class="material-symbols-rounded nav-icon">description</span>
                     <span class="nav-label">实时日志</span>
@@ -142,6 +146,102 @@
                                     </tr>
                                 </thead>
                                 <tbody id="accountsTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- 数据分析页面 -->
+                <div id="page-analytics" class="page">
+                    <!-- 种植推荐卡片 -->
+                    <div class="stats-row">
+                        <div class="stat-card stat-card-wide">
+                            <div class="stat-card-icon primary">
+                                <span class="material-symbols-rounded">recommend</span>
+                            </div>
+                            <div class="stat-card-content">
+                                <span class="stat-label label-medium">最佳种植推荐</span>
+                                <span class="stat-value headline-small" id="recommendSeedName">-</span>
+                                <span class="stat-sublabel body-small" id="recommendSeedReason"></span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-icon success">
+                                <span class="material-symbols-rounded">speed</span>
+                            </div>
+                            <div class="stat-card-content">
+                                <span class="stat-value headline-large" id="recommendExpPerHour">-</span>
+                                <span class="stat-label label-medium">经验/小时</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-icon tertiary">
+                                <span class="material-symbols-rounded">trending_up</span>
+                            </div>
+                            <div class="stat-card-content">
+                                <span class="stat-value headline-large" id="recommendExpPerDay">-</span>
+                                <span class="stat-label label-medium">经验/天</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 排行榜筛选 -->
+                    <section class="content-section">
+                        <div class="section-header">
+                            <h2 class="section-title title-large">种植效率排行榜</h2>
+                            <div class="section-actions">
+                                <div class="filter-group">
+                                    <label class="filter-label">等级</label>
+                                    <input type="number" id="leaderboardLevel" class="filter-input" value="30" min="1" max="100">
+                                </div>
+                                <div class="filter-group">
+                                    <label class="filter-label">土地数</label>
+                                    <input type="number" id="leaderboardLands" class="filter-input" value="18" min="1" max="24">
+                                </div>
+                                <div class="filter-group">
+                                    <label class="filter-label">排序</label>
+                                    <select id="leaderboardSort" class="filter-select">
+                                        <option value="exp_per_hour">经验效率</option>
+                                        <option value="profit_per_hour">利润效率</option>
+                                        <option value="exp_per_gold">经验/金币</option>
+                                        <option value="grow_time">生长时间</option>
+                                    </select>
+                                </div>
+                                <div class="filter-group">
+                                    <label class="filter-label">施肥</label>
+                                    <select id="leaderboardFertilizer" class="filter-select">
+                                        <option value="none">不施肥</option>
+                                        <option value="normal">普通肥</option>
+                                    </select>
+                                </div>
+                                <button class="btn btn-filled" onclick="app.loadLeaderboard()">
+                                    <span class="material-symbols-rounded">refresh</span>
+                                    刷新
+                                </button>
+                            </div>
+                        </div>
+                        <div class="leaderboard-container">
+                            <table class="data-table leaderboard-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:60px">排名</th>
+                                        <th>种子名称</th>
+                                        <th>等级要求</th>
+                                        <th>种子价格</th>
+                                        <th>生长时间</th>
+                                        <th>经验/小时</th>
+                                        <th>经验/天</th>
+                                        <th>经验/金币</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="leaderboardTableBody">
+                                    <tr>
+                                        <td colspan="8" style="text-align:center;padding:48px;">
+                                            <span class="material-symbols-rounded" style="font-size:48px;opacity:0.5;display:block;margin-bottom:16px;">analytics</span>
+                                            点击刷新按钮加载排行榜
+                                        </td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -420,6 +520,10 @@
         <a href="#accounts" class="bottom-nav-item" data-page="accounts">
             <span class="material-symbols-rounded">group</span>
             <span class="bottom-nav-label">账号</span>
+        </a>
+        <a href="#analytics" class="bottom-nav-item" data-page="analytics">
+            <span class="material-symbols-rounded">analytics</span>
+            <span class="bottom-nav-label">分析</span>
         </a>
         <a href="#logs" class="bottom-nav-item" data-page="logs">
             <span class="material-symbols-rounded">description</span>

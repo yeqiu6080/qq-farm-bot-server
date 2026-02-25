@@ -697,6 +697,26 @@ html, body {
     color: var(--md-sys-color-on-tertiary-container);
 }
 
+.stat-card-wide {
+    grid-column: span 2;
+}
+
+.stat-card-wide .stat-card-content {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.stat-sublabel {
+    color: var(--md-sys-color-on-surface-variant);
+    margin-top: 4px;
+}
+
+@media (max-width: 768px) {
+    .stat-card-wide {
+        grid-column: span 1;
+    }
+}
+
 .stat-card-icon.success {
     background-color: var(--md-sys-color-success-container);
     color: var(--md-sys-color-on-success-container);
@@ -1800,6 +1820,76 @@ html, body {
     .snackbar.show {
         transform: translateY(0);
     }
+}
+
+/* ----- Leaderboard ----- */
+.leaderboard-container {
+    overflow-x: auto;
+    border-radius: var(--md-sys-shape-corner-medium);
+}
+
+.leaderboard-table {
+    min-width: 800px;
+}
+
+.leaderboard-table th {
+    position: sticky;
+    top: 0;
+    background-color: var(--md-sys-color-surface-container-low);
+    z-index: 1;
+}
+
+.leaderboard-table td:first-child {
+    font-weight: 600;
+    text-align: center;
+}
+
+.leaderboard-table tr:nth-child(1) td:first-child {
+    color: #FFD700; /* 金牌 */
+    font-size: 18px;
+}
+
+.leaderboard-table tr:nth-child(2) td:first-child {
+    color: #C0C0C0; /* 银牌 */
+    font-size: 16px;
+}
+
+.leaderboard-table tr:nth-child(3) td:first-child {
+    color: #CD7F32; /* 铜牌 */
+    font-size: 16px;
+}
+
+/* ----- Filter Group ----- */
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.filter-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--md-sys-color-on-surface-variant);
+    letter-spacing: 0.5px;
+}
+
+.filter-input,
+.filter-select {
+    padding: 8px 12px;
+    background-color: var(--md-sys-color-surface-container);
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: var(--md-sys-shape-corner-small);
+    color: var(--md-sys-color-on-surface);
+    font-size: 14px;
+    min-width: 80px;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+    outline: none;
+    border-color: var(--md-sys-color-primary);
+    border-width: 2px;
+    padding: 7px 11px;
 }
 
 /* ----- Scrollbar ----- */

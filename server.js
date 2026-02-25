@@ -786,7 +786,7 @@ app.post('/api/offline-reminder/test', async (req, res) => {
 app.get('/api/stats/detailed', (req, res) => {
     const memUsage = process.memoryUsage();
     const farmStats = farmManager.getStats();
-    
+
     res.json({
         success: true,
         data: {
@@ -803,6 +803,65 @@ app.get('/api/stats/detailed', (req, res) => {
             platform: process.platform
         }
     });
+});
+
+// ============ 数据分析 API ============
+
+const { getAnalyticsService } = require('./src/AnalyticsService');
+const analyticsService = getAnalyticsService();
+
+// 获取种植效率排行榜
+app.get('/api/analytics/leaderboard', (req, res) => {
+    try {
+        const options = {
+            lands: parseInt(req.query.lands) || 18,
+            level: parseInt(req.query.level) || 100,
+            sortBy: req.query.sortBy || 'exp_per_hour', // exp_per_hour, profit_per_hour, exp_per_gold, grow_time
+            fertilizer: req.query.fertilizer || 'none', // none, normal
+            limit: parseInt(req.query.limit) || 20,
+        };
+
+        const result = analyticsService.getPlantingLeaderboard(options);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 获取种植推荐
+app.get('/api/analytics/recommendation', (req, res) => {
+    try {
+        const level = parseInt(req.query.level) || 1;
+        const lands = parseInt(req.query.lands) || 18;
+        const strategy = req.query.strategy || 'exp'; // exp, profit, balanced
+
+        const result = analyticsService.getRecommendation(level, lands, strategy);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 获取种子详情
+app.get('/api/analytics/seeds/:seedId', (req, res) => {
+    try {
+        const seedId = parseInt(req.params.seedId);
+        const result = analyticsService.getSeedDetail(seedId);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 比较多个种子
+app.post('/api/analytics/compare', (req, res) => {
+    try {
+        const { seedIds } = req.body;
+        const result = analyticsService.compareSeeds(seedIds);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
 });
 
 // 辅助函数：获取登录码

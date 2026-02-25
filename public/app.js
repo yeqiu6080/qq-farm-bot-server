@@ -262,7 +262,7 @@ class FarmApp {
                 item.classList.add('active');
             }
         });
-        
+
         // 更新底部导航
         document.querySelectorAll('.bottom-nav-item').forEach(item => {
             item.classList.remove('active');
@@ -279,9 +279,120 @@ class FarmApp {
         const titles = {
             dashboard: '控制台总览',
             accounts: '账号管理',
+            analytics: '数据分析',
             logs: '实时日志'
         };
         document.getElementById('pageTitle').textContent = titles[page];
+
+        // 页面特定初始化
+        if (page === 'analytics') {
+            this.loadAnalytics();
+        }
+    }
+
+    // ===== Analytics =====
+
+    async loadAnalytics() {
+        // 加载推荐
+        await this.loadRecommendation();
+        // 加载排行榜
+        await this.loadLeaderboard();
+    }
+
+    async loadRecommendation() {
+        try {
+            // 获取最高等级账号的等级
+            let maxLevel = 30;
+            this.runningAccounts.forEach(status => {
+                if (status.userState?.level > maxLevel) {
+                    maxLevel = status.userState.level;
+                }
+            });
+
+            const response = await fetch(`/api/analytics/recommendation?level=${maxLevel}&lands=18&strategy=exp`);
+            const result = await response.json();
+
+            if (result.success) {
+                const rec = result.data.recommendation;
+                document.getElementById('recommendSeedName').textContent = rec.name || '-';
+                document.getElementById('recommendSeedReason').textContent = rec.reason || '';
+                document.getElementById('recommendExpPerHour').textContent = rec.expPerHour ? rec.expPerHour.toLocaleString() : '-';
+                document.getElementById('recommendExpPerDay').textContent = rec.expPerHour ? (rec.expPerHour * 24).toLocaleString() : '-';
+            }
+        } catch (error) {
+            console.error('加载推荐失败:', error);
+        }
+    }
+
+    async loadLeaderboard() {
+        const tbody = document.getElementById('leaderboardTableBody');
+        const level = document.getElementById('leaderboardLevel').value || 30;
+        const lands = document.getElementById('leaderboardLands').value || 18;
+        const sortBy = document.getElementById('leaderboardSort').value || 'exp_per_hour';
+        const fertilizer = document.getElementById('leaderboardFertilizer').value || 'none';
+
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align:center;padding:48px;">
+                    <span class="material-symbols-rounded" style="font-size:48px;opacity:0.5;display:block;margin-bottom:16px;">refresh</span>
+                    加载中...
+                </td>
+            </tr>
+        `;
+
+        try {
+            const response = await fetch(`/api/analytics/leaderboard?level=${level}&lands=${lands}&sortBy=${sortBy}&fertilizer=${fertilizer}&limit=20`);
+            const result = await response.json();
+
+            if (!result.success) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" style="text-align:center;padding:48px;color:var(--md-sys-color-error)">
+                            <span class="material-symbols-rounded" style="font-size:48px;display:block;margin-bottom:16px;">error</span>
+                            ${result.message || '加载失败'}
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            const rankings = result.data.rankings;
+
+            if (rankings.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" style="text-align:center;padding:48px;">
+                            <span class="material-symbols-rounded" style="font-size:48px;opacity:0.5;display:block;margin-bottom:16px;">inbox</span>
+                            暂无数据
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = rankings.map((item, index) => `
+                <tr>
+                    <td>${item.rank}</td>
+                    <td><strong>${this.escapeHtml(item.name)}</strong></td>
+                    <td>Lv${item.requiredLevel}</td>
+                    <td>${item.price.toLocaleString()}</td>
+                    <td>${item.growTime}</td>
+                    <td style="color:var(--md-sys-color-primary);font-weight:500">${item.expPerHour.toLocaleString()}</td>
+                    <td>${item.expPerDay.toLocaleString()}</td>
+                    <td>${item.expPerGold}</td>
+                </tr>
+            `).join('');
+
+        } catch (error) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align:center;padding:48px;color:var(--md-sys-color-error)">
+                        <span class="material-symbols-rounded" style="font-size:48px;display:block;margin-bottom:16px;">error</span>
+                        加载失败: ${error.message}
+                    </td>
+                </tr>
+            `;
+        }
     }
 
     // ===== Account Management =====
