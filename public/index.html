@@ -260,7 +260,7 @@
 
     <!-- 账号详情对话框 -->
     <div class="dialog-overlay" id="accountDetailModal">
-        <div class="dialog dialog-large">
+        <div class="dialog dialog-xlarge">
             <div class="dialog-header">
                 <h3 class="dialog-title headline-small" id="detailAccountName">账号详情</h3>
                 <button class="icon-btn dialog-close" onclick="app.hideAccountDetailModal()">
@@ -268,11 +268,96 @@
                 </button>
             </div>
             <div class="dialog-content">
-                <div class="detail-grid" id="accountDetailContent">
+                <!-- 标签页导航 -->
+                <div class="tabs" id="accountDetailTabs">
+                    <button class="tab active" data-tab="overview">
+                        <span class="material-symbols-rounded">info</span>
+                        概览
+                    </button>
+                    <button class="tab" data-tab="lands">
+                        <span class="material-symbols-rounded">grid_view</span>
+                        土地
+                    </button>
+                    <button class="tab" data-tab="tasks">
+                        <span class="material-symbols-rounded">task</span>
+                        任务
+                    </button>
+                    <button class="tab" data-tab="logs">
+                        <span class="material-symbols-rounded">description</span>
+                        日志
+                    </button>
                 </div>
-                <div class="detail-logs">
-                    <h4 class="title-medium">最近日志</h4>
-                    <div class="logs-list" id="detailLogsList"></div>
+
+                <!-- 概览标签页 -->
+                <div class="tab-content active" id="tab-overview">
+                    <div class="detail-grid" id="accountDetailContent"></div>
+                </div>
+
+                <!-- 土地标签页 -->
+                <div class="tab-content" id="tab-lands">
+                    <div class="lands-section">
+                        <div class="lands-header">
+                            <div class="lands-stats" id="landsStats">
+                                <span class="lands-stat">总土地: <strong>0</strong></span>
+                                <span class="lands-stat">已解锁: <strong>0</strong></span>
+                                <span class="lands-stat">可收获: <strong>0</strong></span>
+                                <span class="lands-stat">需浇水: <strong>0</strong></span>
+                                <span class="lands-stat">需除草: <strong>0</strong></span>
+                                <span class="lands-stat">需除虫: <strong>0</strong></span>
+                            </div>
+                            <div class="lands-actions">
+                                <button class="btn btn-filled" onclick="app.refreshLands()">
+                                    <span class="material-symbols-rounded">refresh</span>
+                                    刷新
+                                </button>
+                                <button class="btn btn-tonal" onclick="app.harvestAllLands()">
+                                    <span class="material-symbols-rounded">agriculture</span>
+                                    一键收获
+                                </button>
+                            </div>
+                        </div>
+                        <div class="lands-grid" id="landsGrid">
+                            <div class="empty-state">
+                                <span class="material-symbols-rounded empty-icon">grid_off</span>
+                                <p class="body-large">加载土地信息中...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 任务标签页 -->
+                <div class="tab-content" id="tab-tasks">
+                    <div class="tasks-section">
+                        <div class="tasks-header">
+                            <h4 class="title-medium">成长任务</h4>
+                            <button class="btn btn-tonal" onclick="app.claimAllTaskRewards()">
+                                <span class="material-symbols-rounded">redeem</span>
+                                一键领取
+                            </button>
+                        </div>
+                        <div class="tasks-list" id="growthTasksList">
+                            <div class="empty-state">
+                                <span class="material-symbols-rounded empty-icon">task</span>
+                                <p class="body-large">暂无任务数据</p>
+                            </div>
+                        </div>
+                        <div class="tasks-header" style="margin-top: 24px;">
+                            <h4 class="title-medium">每日任务</h4>
+                        </div>
+                        <div class="tasks-list" id="dailyTasksList">
+                            <div class="empty-state">
+                                <span class="material-symbols-rounded empty-icon">task</span>
+                                <p class="body-large">暂无任务数据</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 日志标签页 -->
+                <div class="tab-content" id="tab-logs">
+                    <div class="detail-logs">
+                        <div class="logs-list logs-list-large" id="detailLogsList"></div>
+                    </div>
                 </div>
             </div>
             <div class="dialog-actions">

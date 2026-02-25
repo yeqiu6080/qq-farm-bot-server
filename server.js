@@ -403,7 +403,7 @@ app.post('/api/accounts/:id/lands/:landId/upgrade', async (req, res) => {
         if (!connection || !connection.landManager) {
             return res.status(404).json({ success: false, message: '账号未运行' });
         }
-        
+
         const landId = parseInt(req.params.landId);
         const result = await connection.landManager.upgradeLand(landId);
         res.json({ success: true, data: result });
@@ -411,6 +411,134 @@ app.post('/api/accounts/:id/lands/:landId/upgrade', async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 });
+
+// ============ 任务系统 API ============
+
+// 获取任务列表
+app.get('/api/accounts/:id/tasks', async (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+
+        // 获取任务信息
+        const { types } = require('./src/proto');
+        const { toNum } = require('./src/utils');
+
+        const body = types.TaskInfoRequest.encode(types.TaskInfoRequest.create({})).finish();
+        const { body: replyBody } = await connection.sendMsgAsync(
+            'gamepb.taskpb.TaskService', 'TaskInfo', body
+        );
+        const taskReply = types.TaskInfoReply.decode(replyBody);
+        const tasks = taskReply.tasks || [];
+
+        // 分类任务
+        const growthTasks = [];
+        const dailyTasks = [];
+
+        for (const task of tasks) {
+            const taskData = {
+                id: String(toNum(task.id)),
+                name: task.name || '未知任务',
+                desc: task.desc || '',
+                type: task.type || 'daily',
+                current: toNum(task.current) || 0,
+                target: toNum(task.target) || 1,
+                status: toNum(task.status) || 0, // 0=未开始, 1=进行中, 2=可领取, 3=已完成
+                reward: formatTaskReward(task.reward)
+            };
+
+            // 根据任务ID或类型分类
+            // 成长任务通常是ID较小的固定任务
+            if (taskData.id < 1000 || taskData.type === 'growth') {
+                growthTasks.push(taskData);
+            } else {
+                dailyTasks.push(taskData);
+            }
+        }
+
+        res.json({
+            success: true,
+            data: {
+                growthTasks,
+                dailyTasks,
+                updatedAt: Date.now()
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 领取单个任务奖励
+app.post('/api/accounts/:id/tasks/:taskId/claim', async (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+
+        const { types } = require('./src/proto');
+        const { toLong } = require('./src/utils');
+
+        const taskId = parseInt(req.params.taskId);
+
+        const claimBody = types.BatchClaimTaskRewardRequest.encode(
+            types.BatchClaimTaskRewardRequest.create({
+                task_ids: [toLong(taskId)]
+            })
+        ).finish();
+
+        await connection.sendMsgAsync(
+            'gamepb.taskpb.TaskService', 'BatchClaimTaskReward', claimBody
+        );
+
+        res.json({ success: true, data: { claimed: 1 } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 一键领取所有可领取的任务奖励
+app.post('/api/accounts/:id/tasks/claim-all', async (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+
+        // 使用 FarmConnection 的 claimTasks 方法
+        await connection.claimTasks();
+
+        res.json({ success: true, data: { claimed: true } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 格式化任务奖励
+function formatTaskReward(reward) {
+    if (!reward || !reward.items || reward.items.length === 0) {
+        return '';
+    }
+
+    const parts = [];
+    for (const item of reward.items) {
+        const { toNum } = require('./src/utils');
+        const { getItemName } = require('./src/gameConfig');
+
+        const id = toNum(item.id);
+        const count = toNum(item.count);
+
+        if (id === 1 || id === 1001) parts.push(`${count}金币`);
+        else if (id === 2 || id === 1101) parts.push(`${count}经验`);
+        else if (id === 1002) parts.push(`${count}点券`);
+        else parts.push(`${count}${getItemName(id) || '道具'}`);
+    }
+
+    return parts.join(', ');
+}
 
 // 启动所有账号
 app.post('/api/start-all', async (req, res) => {

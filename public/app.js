@@ -673,18 +673,60 @@ class FarmApp {
 
         document.getElementById('detailAccountName').textContent = account.name;
         this.updateAccountDetail();
+        this.bindDetailTabs();
         document.getElementById('accountDetailModal').classList.add('active');
+
+        // 默认加载概览数据
+        this.switchDetailTab('overview');
+    }
+
+    bindDetailTabs() {
+        const tabs = document.querySelectorAll('#accountDetailTabs .tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+                this.switchDetailTab(tabName);
+            });
+        });
+    }
+
+    switchDetailTab(tabName) {
+        // 更新标签按钮状态
+        document.querySelectorAll('#accountDetailTabs .tab').forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.tab === tabName);
+        });
+
+        // 更新内容区域
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+
+        // 加载对应数据
+        switch(tabName) {
+            case 'overview':
+                this.updateAccountDetail();
+                break;
+            case 'lands':
+                this.loadLands();
+                break;
+            case 'tasks':
+                this.loadTasks();
+                break;
+            case 'logs':
+                this.updateAccountDetailLogs();
+                break;
+        }
     }
 
     updateAccountDetail() {
         if (!this.currentAccountId) return;
-        
+
         const account = this.accounts.find(a => a.id === this.currentAccountId);
         const status = this.runningAccounts.get(this.currentAccountId);
-        
+
         const content = document.getElementById('accountDetailContent');
-        const logsList = document.getElementById('detailLogsList');
-        
+
         if (status) {
             content.innerHTML = `
                 <div class="detail-item">
@@ -712,16 +754,6 @@ class FarmApp {
                     <div class="detail-value">${status.stats?.steals || 0}</div>
                 </div>
             `;
-            
-            // 获取该账号的日志
-            const accountLogs = this.logs.filter(l => l.accountId === this.currentAccountId).slice(-20);
-            logsList.innerHTML = accountLogs.map(l => `
-                <div style="padding:4px 0;border-bottom:1px solid var(--md-sys-color-outline-variant)">
-                    <span style="color:var(--md-sys-color-on-surface-variant)">${l.time}</span>
-                    <span style="color:var(--md-sys-color-primary)">[${l.tag}]</span>
-                    ${this.escapeHtml(l.message)}
-                </div>
-            `).join('') || '<div style="color:var(--md-sys-color-on-surface-variant)">暂无日志</div>';
         } else {
             content.innerHTML = `
                 <div class="detail-item">
@@ -733,8 +765,24 @@ class FarmApp {
                     <div class="detail-value">${account.platform.toUpperCase()}</div>
                 </div>
             `;
-            logsList.innerHTML = '<div style="color:var(--md-sys-color-on-surface-variant)">账号未运行</div>';
         }
+    }
+
+    updateAccountDetailLogs() {
+        const logsList = document.getElementById('detailLogsList');
+        if (!this.currentAccountId) {
+            logsList.innerHTML = '<div style="color:var(--md-sys-color-on-surface-variant)">账号未运行</div>';
+            return;
+        }
+
+        const accountLogs = this.logs.filter(l => l.accountId === this.currentAccountId).slice(-50);
+        logsList.innerHTML = accountLogs.map(l => `
+            <div style="padding:4px 0;border-bottom:1px solid var(--md-sys-color-outline-variant)">
+                <span style="color:var(--md-sys-color-on-surface-variant)">${l.time}</span>
+                <span style="color:var(--md-sys-color-primary)">[${l.tag}]</span>
+                ${this.escapeHtml(l.message)}
+            </div>
+        `).join('') || '<div style="color:var(--md-sys-color-on-surface-variant)">暂无日志</div>';
     }
 
     hideAccountDetailModal() {
@@ -954,6 +1002,292 @@ class FarmApp {
             snackbar.classList.remove('show');
             setTimeout(() => snackbar.remove(), 300);
         }, 3000);
+    }
+
+    // ===== Lands =====
+
+    async loadLands() {
+        if (!this.currentAccountId) return;
+
+        const grid = document.getElementById('landsGrid');
+        const stats = document.getElementById('landsStats');
+
+        grid.innerHTML = `
+            <div class="empty-state" style="grid-column: 1/-1;">
+                <span class="material-symbols-rounded empty-icon">refresh</span>
+                <p class="body-large">加载土地信息中...</p>
+            </div>
+        `;
+
+        try {
+            const response = await fetch(`/api/accounts/${this.currentAccountId}/lands`);
+            const result = await response.json();
+
+            if (!result.success) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <span class="material-symbols-rounded empty-icon">error</span>
+                        <p class="body-large">${result.message || '加载失败'}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const data = result.data;
+
+            // 更新统计
+            const harvestableCount = data.lands.filter(l => l.status === 'harvestable').length;
+            const needWaterCount = data.lands.filter(l => l.needWater).length;
+            const needWeedCount = data.lands.filter(l => l.needWeed).length;
+            const needBugCount = data.lands.filter(l => l.needBug).length;
+
+            stats.innerHTML = `
+                <span class="lands-stat">总土地: <strong>${data.totalLands}</strong></span>
+                <span class="lands-stat">已解锁: <strong>${data.unlockedCount}</strong></span>
+                <span class="lands-stat">可收获: <strong style="color:var(--md-sys-color-success)">${harvestableCount}</strong></span>
+                <span class="lands-stat">需浇水: <strong style="color:var(--md-sys-color-primary)">${needWaterCount}</strong></span>
+                <span class="lands-stat">需除草: <strong style="color:var(--md-sys-color-warning)">${needWeedCount}</strong></span>
+                <span class="lands-stat">需除虫: <strong style="color:var(--md-sys-color-error)">${needBugCount}</strong></span>
+            `;
+
+            // 渲染土地网格
+            if (data.lands.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <span class="material-symbols-rounded empty-icon">grid_off</span>
+                        <p class="body-large">暂无土地数据</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = data.lands.map(land => this.renderLandCell(land)).join('');
+
+        } catch (error) {
+            grid.innerHTML = `
+                <div class="empty-state" style="grid-column: 1/-1;">
+                    <span class="material-symbols-rounded empty-icon">error</span>
+                    <p class="body-large">加载失败: ${error.message}</p>
+                </div>
+            `;
+        }
+    }
+
+    renderLandCell(land) {
+        const id = land.id;
+        const unlocked = land.unlocked;
+        const level = land.level || 0;
+
+        if (!unlocked) {
+            return `
+                <div class="land-cell land-locked" title="土地#${id} - 未解锁">
+                    <span class="land-cell-number">${id}</span>
+                    <span class="material-symbols-rounded land-cell-icon" style="color:var(--md-sys-color-outline)">lock</span>
+                    <span class="land-cell-status">未解锁</span>
+                </div>
+            `;
+        }
+
+        const status = land.status;
+        const needWater = land.needWater;
+        const needWeed = land.needWeed;
+        const needBug = land.needBug;
+
+        let icon = 'grass';
+        let statusText = '空地';
+        let extraClass = 'land-empty';
+
+        if (status === 'harvestable') {
+            icon = 'agriculture';
+            statusText = '可收获';
+            extraClass = 'land-harvestable';
+        } else if (status === 'growing') {
+            icon = 'spa';
+            statusText = land.phaseName || '生长中';
+            extraClass = '';
+        } else if (status === 'dead') {
+            icon = 'delete_forever';
+            statusText = '枯萎';
+            extraClass = 'land-dead';
+        }
+
+        const levelClass = `land-level-${level}`;
+        const needWaterClass = needWater ? 'land-need-water' : '';
+        const needWeedClass = needWeed ? 'land-need-weed' : '';
+        const needBugClass = needBug ? 'land-need-bug' : '';
+
+        const timeText = land.timeLeftSec ? this.formatTime(land.timeLeftSec) : '';
+
+        return `
+            <div class="land-cell ${levelClass} ${extraClass} ${needWaterClass} ${needWeedClass} ${needBugClass}"
+                 title="土地#${id} - ${statusText}${needWater ? ' (需浇水)' : ''}${needWeed ? ' (需除草)' : ''}${needBug ? ' (需除虫)' : ''}">
+                <span class="land-cell-number">${id}</span>
+                <span class="material-symbols-rounded land-cell-icon">${icon}</span>
+                <span class="land-cell-status">${statusText}</span>
+                ${timeText ? `<span class="land-cell-time">${timeText}</span>` : ''}
+            </div>
+        `;
+    }
+
+    formatTime(seconds) {
+        if (seconds < 60) return `${seconds}秒`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}分`;
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        return `${hours}时${mins}分`;
+    }
+
+    async refreshLands() {
+        await this.loadLands();
+        this.showSnackbar('土地信息已刷新');
+    }
+
+    async harvestAllLands() {
+        if (!this.currentAccountId) return;
+
+        try {
+            const response = await fetch(`/api/accounts/${this.currentAccountId}/action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'harvestAll' })
+            });
+            const result = await response.json();
+            if (result.success) {
+                this.showSnackbar('一键收获指令已发送');
+                setTimeout(() => this.loadLands(), 1000);
+            } else {
+                this.showSnackbar('收获失败: ' + result.message);
+            }
+        } catch (error) {
+            this.showSnackbar('收获失败: ' + error.message);
+        }
+    }
+
+    // ===== Tasks =====
+
+    async loadTasks() {
+        if (!this.currentAccountId) return;
+
+        const growthList = document.getElementById('growthTasksList');
+        const dailyList = document.getElementById('dailyTasksList');
+
+        growthList.innerHTML = '<div class="empty-state"><span class="material-symbols-rounded empty-icon">refresh</span><p class="body-large">加载中...</p></div>';
+        dailyList.innerHTML = '<div class="empty-state"><span class="material-symbols-rounded empty-icon">refresh</span><p class="body-large">加载中...</p></div>';
+
+        try {
+            const response = await fetch(`/api/accounts/${this.currentAccountId}/tasks`);
+            const result = await response.json();
+
+            if (!result.success) {
+                growthList.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded empty-icon">error</span><p class="body-large">${result.message}</p></div>`;
+                dailyList.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded empty-icon">error</span><p class="body-large">${result.message}</p></div>`;
+                return;
+            }
+
+            const data = result.data;
+
+            // 渲染成长任务
+            if (data.growthTasks && data.growthTasks.length > 0) {
+                growthList.innerHTML = data.growthTasks.map(task => this.renderTaskItem(task, 'growth')).join('');
+            } else {
+                growthList.innerHTML = '<div class="empty-state"><span class="material-symbols-rounded empty-icon">task_alt</span><p class="body-large">暂无成长任务</p></div>';
+            }
+
+            // 渲染每日任务
+            if (data.dailyTasks && data.dailyTasks.length > 0) {
+                dailyList.innerHTML = data.dailyTasks.map(task => this.renderTaskItem(task, 'daily')).join('');
+            } else {
+                dailyList.innerHTML = '<div class="empty-state"><span class="material-symbols-rounded empty-icon">task_alt</span><p class="body-large">暂无每日任务</p></div>';
+            }
+
+        } catch (error) {
+            growthList.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded empty-icon">error</span><p class="body-large">加载失败</p></div>`;
+            dailyList.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded empty-icon">error</span><p class="body-large">加载失败</p></div>`;
+        }
+    }
+
+    renderTaskItem(task, type) {
+        const isCompleted = task.current >= task.target;
+        const progress = Math.min(100, (task.current / task.target) * 100);
+
+        const icons = {
+            growth: 'trending_up',
+            daily: 'today',
+            harvest: 'agriculture',
+            plant: 'spa',
+            friend: 'people',
+            sell: 'shopping_cart',
+            level: 'stars'
+        };
+
+        const icon = icons[task.type] || icons[type] || 'task';
+
+        return `
+            <div class="task-item ${isCompleted ? 'completed' : ''}">
+                <div class="task-icon">
+                    <span class="material-symbols-rounded">${icon}</span>
+                </div>
+                <div class="task-content">
+                    <div class="task-title">${task.name}</div>
+                    <div class="task-desc">${task.desc || ''}</div>
+                </div>
+                <div class="task-progress">
+                    <div class="task-progress-bar">
+                        <div class="task-progress-fill" style="width: ${progress}%"></div>
+                    </div>
+                    <div class="task-progress-text">${task.current}/${task.target}</div>
+                </div>
+                <div class="task-reward">
+                    <span class="material-symbols-rounded">monetization_on</span>
+                    ${task.reward || ''}
+                </div>
+                ${isCompleted ? `
+                    <div class="task-action">
+                        <button class="btn btn-filled" onclick="app.claimTaskReward('${task.id}')">
+                            领取
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    async claimTaskReward(taskId) {
+        if (!this.currentAccountId) return;
+
+        try {
+            const response = await fetch(`/api/accounts/${this.currentAccountId}/tasks/${taskId}/claim`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            if (result.success) {
+                this.showSnackbar('奖励领取成功');
+                this.loadTasks();
+            } else {
+                this.showSnackbar('领取失败: ' + result.message);
+            }
+        } catch (error) {
+            this.showSnackbar('领取失败: ' + error.message);
+        }
+    }
+
+    async claimAllTaskRewards() {
+        if (!this.currentAccountId) return;
+
+        try {
+            const response = await fetch(`/api/accounts/${this.currentAccountId}/tasks/claim-all`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            if (result.success) {
+                this.showSnackbar(`成功领取 ${result.data?.claimed || 0} 个奖励`);
+                this.loadTasks();
+            } else {
+                this.showSnackbar('领取失败: ' + result.message);
+            }
+        } catch (error) {
+            this.showSnackbar('领取失败: ' + error.message);
+        }
     }
 
     // ===== Utilities =====
