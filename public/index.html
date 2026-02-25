@@ -386,6 +386,10 @@
                         <span class="material-symbols-rounded">psychology</span>
                         策略
                     </button>
+                    <button class="tab" data-tab="friend-opt">
+                        <span class="material-symbols-rounded">group</span>
+                        好友
+                    </button>
                     <button class="tab" data-tab="logs">
                         <span class="material-symbols-rounded">description</span>
                         日志
@@ -531,6 +535,78 @@
                                 <span class="material-symbols-rounded">save</span>
                                 保存策略
                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 好友优化标签页 -->
+                <div class="tab-content" id="tab-friend-opt">
+                    <div class="friend-opt-section">
+                        <div class="strategy-header">
+                            <h4 class="title-medium">静默时段设置</h4>
+                            <span class="strategy-current" id="quietHoursStatusLabel">当前状态: 未启用</span>
+                        </div>
+                        <div class="quiet-hours-card">
+                            <div class="quiet-hours-toggle">
+                                <label class="switch">
+                                    <input type="checkbox" id="quietHoursEnabled">
+                                    <span class="switch-slider"></span>
+                                </label>
+                                <span class="body-large">启用静默时段</span>
+                            </div>
+                            <div class="quiet-hours-time" id="quietHoursTimeSection">
+                                <div class="time-input-group">
+                                    <label class="label-medium">开始时间</label>
+                                    <input type="number" id="quietStartHour" class="time-input" min="0" max="23" value="23">
+                                    <span class="body-medium">:00</span>
+                                </div>
+                                <span class="time-separator">至</span>
+                                <div class="time-input-group">
+                                    <label class="label-medium">结束时间</label>
+                                    <input type="number" id="quietEndHour" class="time-input" min="0" max="23" value="7">
+                                    <span class="body-medium">:00</span>
+                                </div>
+                            </div>
+                            <div class="quiet-hours-info">
+                                <span class="material-symbols-rounded">info</span>
+                                <span class="body-medium">静默时段内将暂停好友互动（偷菜、浇水、除草、除虫）</span>
+                            </div>
+                        </div>
+                        <div class="strategy-actions">
+                            <button class="btn btn-filled" onclick="app.saveQuietHours()">
+                                <span class="material-symbols-rounded">save</span>
+                                保存设置
+                            </button>
+                        </div>
+
+                        <div class="friend-stats-section" style="margin-top: 32px;">
+                            <div class="strategy-header">
+                                <h4 class="title-medium">好友访问统计</h4>
+                            </div>
+                            <div class="friend-stats-grid" id="friendStatsGrid">
+                                <div class="stat-item">
+                                    <span class="stat-value headline-medium" id="trackedFriendsCount">0</span>
+                                    <span class="stat-label label-medium">追踪好友</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-value headline-medium" id="totalVisitsCount">0</span>
+                                    <span class="stat-label label-medium">总访问次数</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-value headline-medium" id="successVisitsCount">0</span>
+                                    <span class="stat-label label-medium">成功访问</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-value headline-medium" id="successRateValue">0%</span>
+                                    <span class="stat-label label-medium">成功率</span>
+                                </div>
+                            </div>
+                            <div class="strategy-actions" style="margin-top: 16px;">
+                                <button class="btn btn-tonal" onclick="app.clearFriendStats()">
+                                    <span class="material-symbols-rounded">clear_all</span>
+                                    清除统计
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

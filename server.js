@@ -929,6 +929,86 @@ app.get('/api/strategies', (req, res) => {
     }
 });
 
+// ============ 好友互动优化 API ============
+
+// 获取账号好友优化器状态
+app.get('/api/accounts/:id/friend-optimizer', (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection || !connection.friendOptimizer) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+
+        const status = connection.friendOptimizer.getStatus();
+        res.json({ success: true, data: status });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 设置账号静默时段
+app.post('/api/accounts/:id/friend-optimizer/quiet-hours', (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection || !connection.friendOptimizer) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+
+        const { enabled, startHour, endHour } = req.body;
+
+        // 验证参数
+        if (enabled !== undefined && typeof enabled !== 'boolean') {
+            return res.status(400).json({ success: false, message: 'enabled必须是布尔值' });
+        }
+        if (startHour !== undefined && (startHour < 0 || startHour > 23)) {
+            return res.status(400).json({ success: false, message: 'startHour必须在0-23之间' });
+        }
+        if (endHour !== undefined && (endHour < 0 || endHour > 23)) {
+            return res.status(400).json({ success: false, message: 'endHour必须在0-23之间' });
+        }
+
+        connection.friendOptimizer.setQuietHours({
+            enabled: enabled ?? connection.friendOptimizer.quietHours.enabled,
+            startHour: startHour ?? connection.friendOptimizer.quietHours.startHour,
+            endHour: endHour ?? connection.friendOptimizer.quietHours.endHour,
+        });
+
+        // 保存到账号配置
+        const account = accountManager.getAccount(req.params.id);
+        if (account) {
+            account.config = account.config || {};
+            account.config.quietHours = { ...connection.friendOptimizer.quietHours };
+            accountManager.updateAccount(req.params.id, account);
+        }
+
+        res.json({
+            success: true,
+            data: connection.friendOptimizer.getStatus(),
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 清除好友访问统计
+app.post('/api/accounts/:id/friend-optimizer/clear-stats', (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection || !connection.friendOptimizer) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+
+        connection.friendOptimizer.clearStats();
+
+        res.json({
+            success: true,
+            message: '好友访问统计已清除',
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // 辅助函数：获取登录码
 async function requestLoginCode() {
     const axios = require('axios');

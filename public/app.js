@@ -827,6 +827,9 @@ class FarmApp {
             case 'strategy':
                 this.loadStrategy();
                 break;
+            case 'friend-opt':
+                this.loadFriendOptimizer();
+                break;
             case 'logs':
                 this.updateAccountDetailLogs();
                 break;
@@ -1455,6 +1458,111 @@ class FarmApp {
             }
         } catch (error) {
             this.showSnackbar('保存失败: ' + error.message);
+        }
+    }
+
+    // ===== Friend Optimizer =====
+
+    async loadFriendOptimizer() {
+        if (!this.currentAccountId) return;
+
+        try {
+            const response = await fetch(`/api/accounts/${this.currentAccountId}/friend-optimizer`);
+            const result = await response.json();
+
+            if (result.success) {
+                const { quietHours, visitStats } = result.data;
+
+                // 更新静默时段UI
+                document.getElementById('quietHoursEnabled').checked = quietHours.enabled;
+                document.getElementById('quietStartHour').value = quietHours.startHour;
+                document.getElementById('quietEndHour').value = quietHours.endHour;
+
+                // 更新状态标签
+                const statusLabel = document.getElementById('quietHoursStatusLabel');
+                if (quietHours.enabled) {
+                    if (quietHours.isInQuietHours) {
+                        statusLabel.textContent = `当前状态: 静默中 (剩余${quietHours.remainingMinutes}分钟)`;
+                        statusLabel.style.color = 'var(--md-sys-color-error)';
+                    } else {
+                        statusLabel.textContent = `当前状态: 已启用 (${quietHours.startHour}:00-${quietHours.endHour}:00)`;
+                        statusLabel.style.color = 'var(--md-sys-color-success)';
+                    }
+                } else {
+                    statusLabel.textContent = '当前状态: 未启用';
+                    statusLabel.style.color = 'var(--md-sys-color-on-surface-variant)';
+                }
+
+                // 更新统计
+                document.getElementById('trackedFriendsCount').textContent = visitStats.trackedFriends;
+                document.getElementById('totalVisitsCount').textContent = visitStats.totalVisits;
+                document.getElementById('successVisitsCount').textContent = visitStats.totalSuccess;
+
+                const successRate = visitStats.totalVisits > 0
+                    ? Math.round((visitStats.totalSuccess / visitStats.totalVisits) * 100)
+                    : 0;
+                document.getElementById('successRateValue').textContent = successRate + '%';
+            }
+        } catch (error) {
+            console.error('加载好友优化器状态失败:', error);
+        }
+    }
+
+    async saveQuietHours() {
+        if (!this.currentAccountId) return;
+
+        const enabled = document.getElementById('quietHoursEnabled').checked;
+        const startHour = parseInt(document.getElementById('quietStartHour').value);
+        const endHour = parseInt(document.getElementById('quietEndHour').value);
+
+        // 验证时间
+        if (isNaN(startHour) || startHour < 0 || startHour > 23) {
+            this.showSnackbar('开始时间必须在0-23之间');
+            return;
+        }
+        if (isNaN(endHour) || endHour < 0 || endHour > 23) {
+            this.showSnackbar('结束时间必须在0-23之间');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/accounts/${this.currentAccountId}/friend-optimizer/quiet-hours`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled, startHour, endHour })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                this.showSnackbar('静默时段设置已保存');
+                this.loadFriendOptimizer(); // 刷新状态
+            } else {
+                this.showSnackbar('保存失败: ' + result.message);
+            }
+        } catch (error) {
+            this.showSnackbar('保存失败: ' + error.message);
+        }
+    }
+
+    async clearFriendStats() {
+        if (!this.currentAccountId) return;
+
+        if (!confirm('确定要清除好友访问统计吗？')) return;
+
+        try {
+            const response = await fetch(`/api/accounts/${this.currentAccountId}/friend-optimizer/clear-stats`, {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                this.showSnackbar('统计已清除');
+                this.loadFriendOptimizer(); // 刷新状态
+            } else {
+                this.showSnackbar('清除失败: ' + result.message);
+            }
+        } catch (error) {
+            this.showSnackbar('清除失败: ' + error.message);
         }
     }
 

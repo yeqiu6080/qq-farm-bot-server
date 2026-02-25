@@ -1,6 +1,7 @@
 /**
  * 好友智能预筛选模块
  * 根据好友列表摘要数据跳过无事可做的好友，减少无效请求
+ * 支持静默时段控制
  */
 
 const { toNum, sleep } = require('./utils');
@@ -8,6 +9,88 @@ const { toNum, sleep } = require('./utils');
 class FriendOptimizer {
     constructor(farmConnection) {
         this.fc = farmConnection;
+        // 静默时段配置
+        this.quietHours = {
+            enabled: false,
+            startHour: 23,  // 默认23点开始
+            endHour: 7,     // 默认7点结束
+        };
+        // 好友访问统计
+        this.visitStats = new Map(); // gid -> { lastVisit, visitCount, successCount }
+        // 上次检查时间
+        this.lastCheckTime = null;
+    }
+
+    /**
+     * 设置静默时段
+     * @param {Object} config - 静默时段配置
+     * @param {boolean} config.enabled - 是否启用
+     * @param {number} config.startHour - 开始时间(0-23)
+     * @param {number} config.endHour - 结束时间(0-23)
+     */
+    setQuietHours(config) {
+        this.quietHours = {
+            enabled: config.enabled ?? this.quietHours.enabled,
+            startHour: config.startHour ?? this.quietHours.startHour,
+            endHour: config.endHour ?? this.quietHours.endHour,
+        };
+        this.fc.addLog('好友', `静默时段设置: ${this.quietHours.enabled ? `${this.quietHours.startHour}:00-${this.quietHours.endHour}:00` : '未启用'}`);
+    }
+
+    /**
+     * 检查当前是否在静默时段
+     * @returns {boolean}
+     */
+    isInQuietHours() {
+        if (!this.quietHours.enabled) return false;
+        
+        const now = new Date();
+        const currentHour = now.getHours();
+        const { startHour, endHour } = this.quietHours;
+        
+        // 处理跨天的情况，如 23:00 - 07:00
+        if (startHour > endHour) {
+            return currentHour >= startHour || currentHour < endHour;
+        }
+        // 不跨天的情况，如 01:00 - 05:00
+        return currentHour >= startHour && currentHour < endHour;
+    }
+
+    /**
+     * 获取静默时段状态
+     * @returns {Object}
+     */
+    getQuietHoursStatus() {
+        const now = new Date();
+        const currentHour = now.getHours();
+        const { startHour, endHour, enabled } = this.quietHours;
+        
+        let remainingMinutes = 0;
+        if (enabled && this.isInQuietHours()) {
+            // 计算剩余静默时间（分钟）
+            if (startHour > endHour) {
+                // 跨天情况
+                if (currentHour >= startHour) {
+                    // 当前在 startHour 到 23:59 之间
+                    remainingMinutes = (24 - currentHour + endHour) * 60 - now.getMinutes();
+                } else {
+                    // 当前在 00:00 到 endHour 之间
+                    remainingMinutes = (endHour - currentHour) * 60 - now.getMinutes();
+                }
+            } else {
+                // 不跨天
+                remainingMinutes = (endHour - currentHour) * 60 - now.getMinutes();
+            }
+        }
+        
+        return {
+            enabled,
+            startHour,
+            endHour,
+            isInQuietHours: this.isInQuietHours(),
+            currentHour,
+            remainingMinutes: Math.max(0, remainingMinutes),
+        };
     }
 
     /**
@@ -71,6 +154,81 @@ class FriendOptimizer {
             skippedCount,
             totalFriends: friends.length,
         };
+    }
+
+    /**
+     * 根据优先级排序好友
+     * 优先访问高价值好友
+     * @param {Array} friendsToVisit - 待访问好友列表
+     * @returns {Array} 排序后的列表
+     */
+    sortFriendsByPriority(friendsToVisit) {
+        return friendsToVisit.sort((a, b) => {
+            // 计算优先级分数
+            const scoreA = this.calculateFriendPriority(a);
+            const scoreB = this.calculateFriendPriority(b);
+            return scoreB - scoreA; // 降序排列
+        });
+    }
+
+    /**
+     * 计算好友优先级分数
+     * @param {Object} friend - 好友信息
+     * @returns {number}
+     */
+    calculateFriendPriority(friend) {
+        let score = 0;
+        
+        // 可偷作物加分（权重最高）
+        score += friend.stealNum * 10;
+        
+        // 需要帮助的操作加分
+        score += friend.weedNum * 3;
+        score += friend.insectNum * 3;
+        score += friend.dryNum * 2;
+        
+        // 等级高的好友可能有更好的作物
+        score += friend.level * 0.1;
+        
+        // 根据历史访问成功率调整
+        const stats = this.visitStats.get(friend.gid);
+        if (stats) {
+            const successRate = stats.visitCount > 0 ? stats.successCount / stats.visitCount : 0.5;
+            score *= (0.5 + successRate); // 成功率高的好友获得加成
+        }
+        
+        return score;
+    }
+
+    /**
+     * 记录好友访问
+     * @param {number} gid - 好友GID
+     * @param {boolean} success - 是否成功获取资源
+     */
+    recordVisit(gid, success = true) {
+        const stats = this.visitStats.get(gid) || {
+            lastVisit: null,
+            visitCount: 0,
+            successCount: 0,
+        };
+        
+        stats.lastVisit = Date.now();
+        stats.visitCount++;
+        if (success) {
+            stats.successCount++;
+        }
+        
+        this.visitStats.set(gid, stats);
+        
+        // 清理过期的统计数据（保留最近100个好友的记录）
+        if (this.visitStats.size > 100) {
+            const oldestEntries = Array.from(this.visitStats.entries())
+                .sort((a, b) => (a[1].lastVisit || 0) - (b[1].lastVisit || 0))
+                .slice(0, this.visitStats.size - 100);
+            for (const [key] of oldestEntries) {
+                this.visitStats.delete(key);
+            }
+        }
     }
 
     /**
@@ -185,6 +343,13 @@ class FriendOptimizer {
      * @returns {Promise<Object>} 优化结果
      */
     async getOptimizedFriends(friends, toggles = {}) {
+        // 检查静默时段
+        if (this.isInQuietHours()) {
+            const status = this.getQuietHoursStatus();
+            this.fc.addLog('好友', `静默时段中，跳过好友检查 (剩余${status.remainingMinutes}分钟)`);
+            return { friendsToVisit: [], skippedCount: friends.length, totalFriends: friends.length, quietHours: true };
+        }
+
         const { friendsToVisit, skippedCount, totalFriends } = this.prefilterFriends(friends, toggles);
 
         if (friendsToVisit.length === 0) {
@@ -192,11 +357,37 @@ class FriendOptimizer {
             return { friendsToVisit: [], skippedCount, totalFriends };
         }
 
-        // 打印待访问列表摘要
-        const visitSummary = this.generateVisitSummary(friendsToVisit);
-        this.fc.addLog('好友', `待访问 ${friendsToVisit.length}/${totalFriends} 人 (跳过${skippedCount}人): ${visitSummary}`);
+        // 按优先级排序
+        const sortedFriends = this.sortFriendsByPriority(friendsToVisit);
 
-        return { friendsToVisit, skippedCount, totalFriends };
+        // 打印待访问列表摘要
+        const visitSummary = this.generateVisitSummary(sortedFriends);
+        this.fc.addLog('好友', `待访问 ${sortedFriends.length}/${totalFriends} 人 (跳过${skippedCount}人): ${visitSummary}`);
+
+        return { friendsToVisit: sortedFriends, skippedCount, totalFriends };
+    }
+
+    /**
+     * 获取优化器状态
+     * @returns {Object}
+     */
+    getStatus() {
+        return {
+            quietHours: this.getQuietHoursStatus(),
+            visitStats: {
+                trackedFriends: this.visitStats.size,
+                totalVisits: Array.from(this.visitStats.values()).reduce((sum, s) => sum + s.visitCount, 0),
+                totalSuccess: Array.from(this.visitStats.values()).reduce((sum, s) => sum + s.successCount, 0),
+            },
+        };
+    }
+
+    /**
+     * 清除访问统计
+     */
+    clearStats() {
+        this.visitStats.clear();
+        this.fc.addLog('好友', '访问统计数据已清除');
     }
 }
 

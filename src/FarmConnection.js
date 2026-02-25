@@ -108,6 +108,11 @@ class FarmConnection extends EventEmitter {
         this.landManager = new LandManager(this);
         this.friendOptimizer = new FriendOptimizer(this);
         this.plantingStrategy = new PlantingStrategy(this);
+
+        // 初始化好友优化器静默时段配置
+        if (account.config?.quietHours) {
+            this.friendOptimizer.setQuietHours(account.config.quietHours);
+        }
     }
 
     addLog(tag, message) {
@@ -918,7 +923,11 @@ class FarmConnection extends EventEmitter {
                     } catch (e) {}
                 }
 
-                if (actions.length > 0) {
+                // 记录好友访问
+                const hasSuccess = actions.length > 0;
+                this.friendOptimizer.recordVisit(gid, hasSuccess);
+
+                if (hasSuccess) {
                     this.addLog('好友', `${name}: ${actions.join('/')}`);
                 }
 
