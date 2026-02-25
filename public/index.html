@@ -382,6 +382,10 @@
                         <span class="material-symbols-rounded">task</span>
                         任务
                     </button>
+                    <button class="tab" data-tab="strategy">
+                        <span class="material-symbols-rounded">psychology</span>
+                        策略
+                    </button>
                     <button class="tab" data-tab="logs">
                         <span class="material-symbols-rounded">description</span>
                         日志
@@ -449,6 +453,84 @@
                                 <span class="material-symbols-rounded empty-icon">task</span>
                                 <p class="body-large">暂无任务数据</p>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 策略标签页 -->
+                <div class="tab-content" id="tab-strategy">
+                    <div class="strategy-section">
+                        <div class="strategy-header">
+                            <h4 class="title-medium">种植策略设置</h4>
+                            <span class="strategy-current" id="currentStrategyLabel">当前策略: 经验效率优先</span>
+                        </div>
+                        <div class="strategy-list" id="strategyList">
+                            <div class="strategy-item">
+                                <div class="strategy-radio">
+                                    <input type="radio" name="plantingStrategy" value="max_exp" id="strategy_max_exp" checked>
+                                    <span class="radio-checkmark"></span>
+                                </div>
+                                <div class="strategy-content">
+                                    <label for="strategy_max_exp" class="strategy-title">经验效率优先</label>
+                                    <span class="strategy-desc">每小时经验收益最大化（不施肥）</span>
+                                </div>
+                            </div>
+                            <div class="strategy-item">
+                                <div class="strategy-radio">
+                                    <input type="radio" name="plantingStrategy" value="max_fert_exp" id="strategy_max_fert_exp">
+                                    <span class="radio-checkmark"></span>
+                                </div>
+                                <div class="strategy-content">
+                                    <label for="strategy_max_fert_exp" class="strategy-title">普通肥经验优先</label>
+                                    <span class="strategy-desc">使用普通肥后每小时经验收益最大化</span>
+                                </div>
+                            </div>
+                            <div class="strategy-item">
+                                <div class="strategy-radio">
+                                    <input type="radio" name="plantingStrategy" value="max_profit" id="strategy_max_profit">
+                                    <span class="radio-checkmark"></span>
+                                </div>
+                                <div class="strategy-content">
+                                    <label for="strategy_max_profit" class="strategy-title">利润优先</label>
+                                    <span class="strategy-desc">每小时净利润最大化（金币收益-种子成本）</span>
+                                </div>
+                            </div>
+                            <div class="strategy-item">
+                                <div class="strategy-radio">
+                                    <input type="radio" name="plantingStrategy" value="highest_level" id="strategy_highest_level">
+                                    <span class="radio-checkmark"></span>
+                                </div>
+                                <div class="strategy-content">
+                                    <label for="strategy_highest_level" class="strategy-title">最高等级作物</label>
+                                    <span class="strategy-desc">种植当前等级可种的最高等级作物</span>
+                                </div>
+                            </div>
+                            <div class="strategy-item">
+                                <div class="strategy-radio">
+                                    <input type="radio" name="plantingStrategy" value="lowest_cost" id="strategy_lowest_cost">
+                                    <span class="radio-checkmark"></span>
+                                </div>
+                                <div class="strategy-content">
+                                    <label for="strategy_lowest_cost" class="strategy-title">最低成本</label>
+                                    <span class="strategy-desc">优先种植价格最低的种子</span>
+                                </div>
+                            </div>
+                            <div class="strategy-item">
+                                <div class="strategy-radio">
+                                    <input type="radio" name="plantingStrategy" value="balanced" id="strategy_balanced">
+                                    <span class="radio-checkmark"></span>
+                                </div>
+                                <div class="strategy-content">
+                                    <label for="strategy_balanced" class="strategy-title">平衡策略</label>
+                                    <span class="strategy-desc">综合考虑经验和成本的平衡选择</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="strategy-actions">
+                            <button class="btn btn-filled" onclick="app.saveStrategy()">
+                                <span class="material-symbols-rounded">save</span>
+                                保存策略
+                            </button>
                         </div>
                     </div>
                 </div>

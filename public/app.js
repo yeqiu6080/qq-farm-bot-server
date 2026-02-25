@@ -824,6 +824,9 @@ class FarmApp {
             case 'tasks':
                 this.loadTasks();
                 break;
+            case 'strategy':
+                this.loadStrategy();
+                break;
             case 'logs':
                 this.updateAccountDetailLogs();
                 break;
@@ -1398,6 +1401,60 @@ class FarmApp {
             }
         } catch (error) {
             this.showSnackbar('领取失败: ' + error.message);
+        }
+    }
+
+    // ===== Strategy =====
+
+    async loadStrategy() {
+        if (!this.currentAccountId) return;
+
+        try {
+            const response = await fetch(`/api/accounts/${this.currentAccountId}/strategy`);
+            const result = await response.json();
+
+            if (result.success) {
+                const data = result.data;
+                document.getElementById('currentStrategyLabel').textContent = `当前策略: ${data.strategyLabel}`;
+
+                // 设置选中的策略
+                const radio = document.querySelector(`input[name="plantingStrategy"][value="${data.strategy}"]`);
+                if (radio) {
+                    radio.checked = true;
+                }
+            }
+        } catch (error) {
+            console.error('加载策略失败:', error);
+        }
+    }
+
+    async saveStrategy() {
+        if (!this.currentAccountId) return;
+
+        const selectedStrategy = document.querySelector('input[name="plantingStrategy"]:checked');
+        if (!selectedStrategy) {
+            this.showSnackbar('请选择一个策略');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/accounts/${this.currentAccountId}/strategy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    strategy: selectedStrategy.value
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                document.getElementById('currentStrategyLabel').textContent = `当前策略: ${result.data.strategyLabel}`;
+                this.showSnackbar('策略保存成功');
+            } else {
+                this.showSnackbar('保存失败: ' + result.message);
+            }
+        } catch (error) {
+            this.showSnackbar('保存失败: ' + error.message);
         }
     }
 

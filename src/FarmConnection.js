@@ -13,6 +13,7 @@ const { getPlantingRecommendation } = require('../tools/calc-exp-yield');
 const DailyRewards = require('./DailyRewards');
 const LandManager = require('./LandManager');
 const FriendOptimizer = require('./FriendOptimizer');
+const PlantingStrategy = require('./PlantingStrategy');
 
 // 加载种子商店数据用于果实识别
 let seedShopData = null;
@@ -106,6 +107,7 @@ class FarmConnection extends EventEmitter {
         this.dailyRewards = new DailyRewards(this);
         this.landManager = new LandManager(this);
         this.friendOptimizer = new FriendOptimizer(this);
+        this.plantingStrategy = new PlantingStrategy(this);
     }
 
     addLog(tag, message) {
@@ -770,40 +772,15 @@ class FarmConnection extends EventEmitter {
 
             if (available.length === 0) return;
 
-            // 选择策略：优先使用经验效率算法
+            // 使用种植策略系统选择最佳种子
             let bestSeed = null;
-            
+
             if (this.config.forceLowestLevelCrop) {
                 // 强制最低等级作物
-                available.sort((a, b) => a.requiredLevel - b.requiredLevel || a.price - b.price);
-                bestSeed = available[0];
+                bestSeed = this.plantingStrategy.selectLowestCostSeed(available);
             } else {
-                // 使用智能种子选择算法
-                try {
-                    const rec = getPlantingRecommendation(this.userState.level, unlockedLandCount || 18, { top: 50 });
-                    const rankedSeedIds = rec.candidatesNormalFert.map(x => x.seedId);
-                    
-                    // 按经验效率排序查找可用种子
-                    for (const seedId of rankedSeedIds) {
-                        const hit = available.find(x => x.seedId === seedId);
-                        if (hit) {
-                            bestSeed = hit;
-                            break;
-                        }
-                    }
-                } catch (e) {
-                    // 算法失败时使用兜底策略
-                }
-                
-                // 兜底策略：28级以前种白萝卜，28级以上选最高等级
-                if (!bestSeed) {
-                    if (this.userState.level <= 28) {
-                        available.sort((a, b) => a.requiredLevel - b.requiredLevel);
-                    } else {
-                        available.sort((a, b) => b.requiredLevel - a.requiredLevel);
-                    }
-                    bestSeed = available[0];
-                }
+                // 使用策略系统选择种子
+                bestSeed = this.plantingStrategy.selectBestSeed(available, unlockedLandCount);
             }
             const seedName = getPlantNameBySeedId(bestSeed.seedId);
 

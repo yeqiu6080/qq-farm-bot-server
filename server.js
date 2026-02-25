@@ -864,6 +864,71 @@ app.post('/api/analytics/compare', (req, res) => {
     }
 });
 
+// ============ 种植策略 API ============
+
+// 获取账号的种植策略状态
+app.get('/api/accounts/:id/strategy', (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection || !connection.plantingStrategy) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+
+        const status = connection.plantingStrategy.getStatus();
+        res.json({ success: true, data: status });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 设置账号的种植策略
+app.post('/api/accounts/:id/strategy', (req, res) => {
+    try {
+        const connection = farmManager.connections.get(req.params.id);
+        if (!connection || !connection.plantingStrategy) {
+            return res.status(404).json({ success: false, message: '账号未运行' });
+        }
+
+        const { strategy, preferredSeedId, settings } = req.body;
+
+        if (!strategy) {
+            return res.status(400).json({ success: false, message: '请指定策略类型' });
+        }
+
+        connection.plantingStrategy.setStrategy(strategy, {
+            preferredSeedId,
+            ...settings,
+        });
+
+        res.json({
+            success: true,
+            data: connection.plantingStrategy.getStatus(),
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// 获取所有可用种植策略列表
+app.get('/api/strategies', (req, res) => {
+    try {
+        const PlantingStrategy = require('./src/PlantingStrategy');
+        // 创建一个临时实例获取策略列表
+        const tempStrategy = new PlantingStrategy({
+            account: { config: {} },
+            addLog: () => {},
+            userState: { level: 1 },
+        });
+
+        res.json({
+            success: true,
+            data: tempStrategy.getAvailableStrategies(),
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // 辅助函数：获取登录码
 async function requestLoginCode() {
     const axios = require('axios');
